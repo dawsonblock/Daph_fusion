@@ -5,17 +5,17 @@ DAPH ExFusion Model Merging Pipeline - Real Hugging Face Model Merging Runner.
 This script:
 1. Downloads 3 distinct fine-tuned expert models + 1 base model from Hugging Face Hub:
    - Base Model: 'distilbert/distilgpt2'
-   - Expert 1:   'morenolq/distilgpt2-fables-demo' (Fables / Storytelling)
-   - Expert 2:   'postbot/distilgpt2-emailgen' (Email & Professional Writing)
-   - Expert 3:   'FredZhang7/distilgpt2-stable-diffusion' (Prompt & Image Generation)
+   - Expert 1:   'postbot/distilgpt2-emailgen' (Email & Professional Writing)
+   - Expert 2:   'FredZhang7/distilgpt2-stable-diffusion' (Prompt & Image Generation)
+   - Expert 3:   'misterkilgore/distilgpt2-psy-ita' (Psychology & Dialogue)
 2. Clones the base model to create an empty target container (`merged_model`).
 3. Executes the DAPH ExFusion Multi-Stage Model Merging Pipeline:
    - Task Vector Extraction (Δ = W_expert - W_base)
    - DARE Preprocessing (stochastic parameter dropping)
    - TIES v2 Pure Sign-Majority Consensus Voting
-   - Empirical Fisher Diagonal Weighting
+   - Empirical Fisher Diagonal Weighting (using empirical calibration batch)
    - TIES + Fisher Parameter Delta Blending
-   - Delta Application to Target Container (`merged_model`)
+   - Delta Application using provisional scale λ=0.35 (selected from initial qualitative sweep)
 4. Generates text across all individual experts, the base model, and the unified merged model.
 """
 

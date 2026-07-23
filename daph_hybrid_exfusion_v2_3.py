@@ -426,6 +426,7 @@ def difficulty_weighted_ties_merge(
     merged: Dict[str, Tensor] = {}
     for name in names:
         deltas = torch.stack([task_vector[name] for task_vector in task_vectors], dim=0)
+        w = weights.to(deltas.device)
         flat = deltas.flatten(1)
         num_elements = flat.shape[1]
         keep_count = max(1, math.ceil((1.0 - trim_ratio) * num_elements))
@@ -436,7 +437,7 @@ def difficulty_weighted_ties_merge(
 
         if is_ssm_core_param(name, policies) and ssm_soft_merge:
             merged[name] = torch.sum(
-                weights.view(num_experts, *([1] * (trimmed.dim() - 1))) * trimmed,
+                w.view(num_experts, *([1] * (trimmed.dim() - 1))) * trimmed,
                 dim=0,
             )
             continue
@@ -446,7 +447,7 @@ def difficulty_weighted_ties_merge(
         # (sign(delta) * delta.abs() == delta, which collapses the vote
         # into a weighted sum of deltas — the magnitude-weighted bug.)
         vote = torch.sum(
-            weights.view(num_experts, *([1] * (trimmed.dim() - 1))) * torch.sign(trimmed),
+            w.view(num_experts, *([1] * (trimmed.dim() - 1))) * torch.sign(trimmed),
             dim=0,
         )
         elected_sign = torch.sign(vote)
@@ -456,8 +457,8 @@ def difficulty_weighted_ties_merge(
         weighted_denominator = torch.zeros_like(trimmed[0])
         for expert_index in range(num_experts):
             agree_i = agrees[expert_index].to(trimmed.dtype)
-            weighted_numerator += weights[expert_index] * trimmed[expert_index] * agree_i
-            weighted_denominator += weights[expert_index] * agree_i
+            weighted_numerator += w[expert_index] * trimmed[expert_index] * agree_i
+            weighted_denominator += w[expert_index] * agree_i
 
         merged[name] = torch.where(
             weighted_denominator > 0,
@@ -530,17 +531,35 @@ def _extract_logits(output: Any) -> Tensor:
     raise TypeError("Unable to extract a Tensor from model output")
 
 
-def _default_fisher_loss(output: Any, _: Any) -> Tensor:
-    """Diagnostic pseudo-loss fallback for empirical Fisher accumulation.
+def _default_fisher_loss(output: Any, sample: Any) -> Tensor:
+    """Causal LM shift cross-entropy loss or diagnostic pseudo-loss fallback
+    for empirical Fisher accumulation.
 
-    Note: This pseudo-loss is a diagnostic fallback. Production Fisher
-    diagonal estimation requires task-specific loss gradients (e.g. cross-entropy
-    against ground-truth labels) for valid parameter curvature estimates.
+    Excludes padding tokens via attention_mask (ignore_index=-100) and shifts
+    logits for next-token prediction when input_ids are present in sample.
     """
+    if isinstance(sample, Mapping) and "input_ids" in sample:
+        logits = _extract_logits(output)
+        input_ids = sample["input_ids"]
+        if logits.dim() == 3 and input_ids.dim() == 2 and logits.shape[1] == input_ids.shape[1]:
+            shift_logits = logits[..., :-1, :].contiguous().float()
+            shift_labels = input_ids[..., 1:].contiguous()
+            attn_mask = sample.get("attention_mask", None)
+            if attn_mask is not None:
+                shift_mask = attn_mask[..., 1:].contiguous().bool()
+                shift_labels = torch.where(
+                    shift_mask,
+                    shift_labels,
+                    torch.tensor(-100, device=shift_labels.device),
+                )
+            flat_logits = shift_logits.view(-1, shift_logits.size(-1))
+            flat_labels = shift_labels.view(-1)
+            if (flat_labels != -100).any():
+                return F.cross_entropy(flat_logits, flat_labels, ignore_index=-100)
+
     logits = _extract_logits(output)
     if logits.numel() == 0:
         raise ValueError("Model output is empty")
-    # Diagnostic fallback only. Real integrations should provide a task-specific loss_fn.
     if logits.dim() >= 2 and logits.shape[-1] >= 2:
         flat_logits = logits.float().reshape(-1, logits.shape[-1])
         with torch.no_grad():
@@ -1776,6 +1795,7 @@ def merge_expert_family(
     memory_bank_weights: Tensor,
     difficulty_importance: Optional[Tensor] = None,
     calibration_batch: Optional[StructuredBatch] = None,
+    precomputed_fisher_diagonals: Optional[List[Dict[str, Tensor]]] = None,
     apply_to: Optional[nn.Module] = None,
     policies: Optional[Mapping[str, Any]] = None,
     kfac_tracker: Optional[Any] = None,
@@ -1834,7 +1854,9 @@ def merge_expert_family(
     )
 
     fisher_diagonals: List[Dict[str, Tensor]] = []
-    if kfac_tracker is not None:
+    if precomputed_fisher_diagonals is not None:
+        fisher_diagonals = precomputed_fisher_diagonals
+    elif kfac_tracker is not None:
         fisher_diagonals = [
             build_fisher_diagonals_from_tracker(expert, kfac_tracker)
             for expert in experts
