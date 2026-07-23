@@ -55,6 +55,7 @@ SYMBOLIC_PATH = 4
 # 1. NeSy MACRO-ROUTER (symbolic priors before softmax)
 # =============================================================================
 
+
 class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
     """Macro-router with an additive symbolic-prior channel.
 
@@ -78,22 +79,26 @@ class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
         symbolic_priors: Optional[Tensor] = None,
     ) -> Tensor:
         logits = super().forward(hidden_states, difficulty_metrics)
-        priors = symbolic_priors if symbolic_priors is not None else self._pending_priors
+        priors = (
+            symbolic_priors if symbolic_priors is not None else self._pending_priors
+        )
         if priors is None:
             return logits
         priors = priors.to(logits.device, logits.dtype)
-        if priors.dim() == 2:                      # (B, P) -> broadcast over L
+        if priors.dim() == 2:  # (B, P) -> broadcast over L
             priors = priors.unsqueeze(1)
         if priors.shape[-1] != logits.shape[-1]:
             raise ValueError(
                 f"symbolic_priors last dim {priors.shape[-1]} != "
-                f"num_paths {logits.shape[-1]}")
+                f"num_paths {logits.shape[-1]}"
+            )
         return logits + priors
 
 
 # =============================================================================
 # 2. TOKENIZER-BOUND RULES ENGINE (vectorized prior generation)
 # =============================================================================
+
 
 class TokenizerBoundRulesEngine:
     """Maps discrete token patterns to symbolic router priors.
@@ -118,9 +123,7 @@ class TokenizerBoundRulesEngine:
         device: Union[str, torch.device] = "cpu",
     ) -> None:
         self.num_paths = num_paths
-        default_indices = {
-            "attention": 0, "mamba": 1, "transformer": 2, "cheap": 3
-        }
+        default_indices = {"attention": 0, "mamba": 1, "transformer": 2, "cheap": 3}
         if num_paths >= 5:
             default_indices["symbolic"] = 4
         self.expert_indices = expert_indices or default_indices
@@ -137,10 +140,22 @@ class TokenizerBoundRulesEngine:
                 tokenizer, ["[PAD]", "<s>", "</s>", "<pad>", "<unk>"]
             )
             self.json_tokens = self._resolve_tokens(
-                tokenizer, ["{", "}", "[", "]", ":", ",", "\"", "true", "false", "null"]
+                tokenizer, ["{", "}", "[", "]", ":", ",", '"', "true", "false", "null"]
             )
             self.sql_tokens = self._resolve_tokens(
-                tokenizer, ["SELECT", "FROM", "WHERE", "JOIN", "GROUP", "BY", "INSERT", "UPDATE", "DELETE", ";"]
+                tokenizer,
+                [
+                    "SELECT",
+                    "FROM",
+                    "WHERE",
+                    "JOIN",
+                    "GROUP",
+                    "BY",
+                    "INSERT",
+                    "UPDATE",
+                    "DELETE",
+                    ";",
+                ],
             )
             self.symbolic_tokens = self._resolve_tokens(
                 tokenizer, ["eval", "exec", "solve", "sat", "ast"]
@@ -150,7 +165,9 @@ class TokenizerBoundRulesEngine:
             self.logical_operators = set(logical_operators or {38, 124, 94, 126})
             self.padding_tokens = set(padding_tokens or {0, 1, 2})
             self.json_tokens = set(json_tokens or {123, 125, 91, 93, 58, 44, 34})
-            self.sql_tokens = set(sql_tokens or {83, 70, 87, 74, 71, 66, 73, 85, 68, 72, 59})
+            self.sql_tokens = set(
+                sql_tokens or {83, 70, 87, 74, 71, 66, 73, 85, 68, 72, 59}
+            )
             self.symbolic_tokens = set(symbolic_tokens or {35, 64, 36})
 
         self._update_tensor_buffers()
@@ -170,6 +187,7 @@ class TokenizerBoundRulesEngine:
 
     def _update_tensor_buffers(self) -> None:
         """Pre-buffers PyTorch tensors for zero-allocation rule evaluation."""
+
         def make_buf(s: Set[int]) -> Tensor:
             if not s:
                 return torch.empty(0, dtype=torch.long, device=self.device)
@@ -182,9 +200,7 @@ class TokenizerBoundRulesEngine:
         self._buf_sql = make_buf(self.sql_tokens)
         self._buf_sym = make_buf(self.symbolic_tokens)
 
-    def to(
-        self, device: Union[str, torch.device]
-    ) -> "TokenizerBoundRulesEngine":
+    def to(self, device: Union[str, torch.device]) -> "TokenizerBoundRulesEngine":
         self.device = torch.device(device)
         self._update_tensor_buffers()
         return self
@@ -263,6 +279,7 @@ class TokenizerBoundRulesEngine:
 # 3. VECTORIZED SYMBOLIC EXPERT, SUBWORD BRIDGES & DOMAIN SOLVERS
 # =============================================================================
 
+
 class SubwordSequenceBridge:
     """Bridge for multi-token subword token sequences (BPE, SentencePiece, WordPiece).
 
@@ -310,6 +327,7 @@ class SubwordSequenceBridge:
             solved_ids_list.append(re_encoded)
 
         return torch.tensor(solved_ids_list, dtype=torch.long, device=device)
+
 
 def _solver_digit_squaring(token_ids: Tensor) -> Tensor:
     """Digit squaring mod 10 over ASCII '0'-'9' (48-57), vectorized."""
@@ -472,21 +490,21 @@ class VectorizedSymbolicExpert(nn.Module):
         return _solver_digit_squaring(token_ids)
 
     def forward(self, hidden_states: Tensor, **_: Any) -> Tensor:
-        logits = self.de_embed(hidden_states)            # [B, L, V]
+        logits = self.de_embed(hidden_states)  # [B, L, V]
         probs = F.softmax(logits.float(), dim=-1).to(logits.dtype)
-        token_ids = probs.argmax(dim=-1)                 # [B, L]
+        token_ids = probs.argmax(dim=-1)  # [B, L]
         if self.subword_bridge is not None:
             solved_ids = self.subword_bridge(token_ids)
         elif self.vocab_map is not None:
-            solved_ids = self.vocab_map[token_ids]       # Fast GPU subword lookup
+            solved_ids = self.vocab_map[token_ids]  # Fast GPU subword lookup
         else:
-            solved_ids = self._solver(token_ids)         # [B, L]
+            solved_ids = self._solver(token_ids)  # [B, L]
 
         one_hot_solved = F.one_hot(solved_ids, self.vocab_size).to(probs.dtype)
         # Straight-through: forward uses the discrete one-hot; backward
         # flows through probs into de_embed's input.
         ste = (one_hot_solved - probs).detach() + probs
-        symbolic_out = ste @ self.re_embed.weight        # [B, L, H]
+        symbolic_out = ste @ self.re_embed.weight  # [B, L, H]
 
         alpha = torch.sigmoid(self.context_gate)
         blended = (1.0 - alpha) * symbolic_out + alpha * hidden_states
@@ -496,6 +514,7 @@ class VectorizedSymbolicExpert(nn.Module):
 # =============================================================================
 # 4. OUTPUT VERIFIER (vectorized grammar guardrail)
 # =============================================================================
+
 
 class NeSyOutputVerifier:
     """Post-hoc System-2 guardrail over next-token logits.
@@ -517,11 +536,11 @@ class NeSyOutputVerifier:
 
     def verify_and_correct_logits(
         self,
-        decoded_tokens: Tensor,        # [B, T]
-        next_token_logits: Tensor,     # [B, V]
+        decoded_tokens: Tensor,  # [B, T]
+        next_token_logits: Tensor,  # [B, V]
     ) -> Tensor:
-        opens = (decoded_tokens == self.open_token).sum(dim=1)     # [B]
-        closes = (decoded_tokens == self.close_token).sum(dim=1)   # [B]
+        opens = (decoded_tokens == self.open_token).sum(dim=1)  # [B]
+        closes = (decoded_tokens == self.close_token).sum(dim=1)  # [B]
         corrected = next_token_logits.clone()
         needs_close = opens > closes
         forbid_close = opens <= closes
@@ -542,7 +561,9 @@ class JSONOutputVerifier(NeSyOutputVerifier):
         eos_token: int = 2,
         bias: float = 50.0,
     ) -> None:
-        super().__init__(open_token=open_brace, close_token=close_brace, close_bias=bias)
+        super().__init__(
+            open_token=open_brace, close_token=close_brace, close_bias=bias
+        )
         self.open_bracket = open_bracket
         self.close_bracket = close_bracket
         self.eos_token = eos_token
@@ -629,14 +650,19 @@ class FSMGrammarVerifier:
         for b in range(batch_size):
             curr_state = self.initial_state
             for tok in decoded_tokens[b].tolist():
-                if curr_state in self.state_transitions and tok in self.state_transitions[curr_state]:
+                if (
+                    curr_state in self.state_transitions
+                    and tok in self.state_transitions[curr_state]
+                ):
                     curr_state = self.state_transitions[curr_state][tok]
 
             if curr_state in self.state_allowed_tokens:
                 allowed = self.state_allowed_tokens[curr_state]
                 if allowed:
                     mask = torch.full_like(corrected[b], BIAS_FORBID)
-                    indices = torch.tensor(list(allowed), device=corrected.device, dtype=torch.long)
+                    indices = torch.tensor(
+                        list(allowed), device=corrected.device, dtype=torch.long
+                    )
                     mask[indices] = corrected[b, indices]
                     corrected[b] = mask
 
@@ -646,6 +672,7 @@ class FSMGrammarVerifier:
 # =============================================================================
 # 5. NeSy DECODER LAYER (non-invasive integration)
 # =============================================================================
+
 
 class NeSyDecoderLayer(DAPHHybridDecoderLayer):
     """DAPH hybrid layer with symbolic-prior routing and an optional
@@ -744,12 +771,17 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
         **kwargs: Any,
     ) -> Tuple[Tensor, Dict[str, Any]]:
         self._cached_symbolic_out = None
-        if symbolic_priors is None and token_ids is not None \
-                and self.rules_engine is not None:
+        if (
+            symbolic_priors is None
+            and token_ids is not None
+            and self.rules_engine is not None
+        ):
             symbolic_priors = self.rules_engine.generate_priors(token_ids)
-        if symbolic_priors is not None \
-                and self.config.routing_granularity == "batch" \
-                and symbolic_priors.dim() == 3:
+        if (
+            symbolic_priors is not None
+            and self.config.routing_granularity == "batch"
+            and symbolic_priors.dim() == 3
+        ):
             symbolic_priors = symbolic_priors.mean(dim=1)  # pool to (B, P)
 
         assert isinstance(self.macro_router, NeSyMacroRouter)

@@ -5,11 +5,20 @@ import torch
 
 from daph_hybrid_exfusion_v2_3 import DAPHConfig
 from daph_nesy_v1_0 import (
-    BIAS_FORCE, BIAS_FORBID, SYMBOLIC_PATH,
-    NeSyDecoderLayer, NeSyMacroRouter, NeSyOutputVerifier,
-    JSONOutputVerifier, SQLOutputVerifier, FSMGrammarVerifier,
-    SubwordSequenceBridge, TokenizerBoundRulesEngine, VectorizedSymbolicExpert,
-    register_solver, SOLVER_REGISTRY
+    BIAS_FORBID,
+    BIAS_FORCE,
+    SOLVER_REGISTRY,
+    SYMBOLIC_PATH,
+    FSMGrammarVerifier,
+    JSONOutputVerifier,
+    NeSyDecoderLayer,
+    NeSyMacroRouter,
+    NeSyOutputVerifier,
+    SQLOutputVerifier,
+    SubwordSequenceBridge,
+    TokenizerBoundRulesEngine,
+    VectorizedSymbolicExpert,
+    register_solver,
 )
 
 
@@ -24,11 +33,13 @@ def test_1_symbolic_priors_mandate_paths() -> None:
     router.eval()
     x = torch.randn(2, 4, 32, device=device)
     priors = torch.zeros(2, 4, 5, device=device)
-    priors[..., 4] = BIAS_FORCE   # mandate Symbolic path (5th path)
+    priors[..., 4] = BIAS_FORCE  # mandate Symbolic path (5th path)
 
     # Test stateless parameter passing
     logits_direct = router(x, symbolic_priors=priors)
-    assert logits_direct.argmax(-1).eq(4).all(), "stateless symbolic prior did not win argmax"
+    assert (
+        logits_direct.argmax(-1).eq(4).all()
+    ), "stateless symbolic prior did not win argmax"
 
     # Test stateful fallback
     router.set_priors(priors)
@@ -42,15 +53,17 @@ def test_1_symbolic_priors_mandate_paths() -> None:
 def test_2_tokenizer_bound_rules_engine() -> None:
     device = _get_device()
     engine = TokenizerBoundRulesEngine(num_paths=5, device=device)
-    ids = torch.tensor([[43, 0, 38, 123, 83, 35]], device=device)  # +, PAD, &, {, SELECT, symbolic
+    ids = torch.tensor(
+        [[43, 0, 38, 123, 83, 35]], device=device
+    )  # +, PAD, &, {, SELECT, symbolic
     pri = engine.generate_priors(ids)
-    assert pri[0, 0, 2].item() == BIAS_FORCE                       # Transformer
+    assert pri[0, 0, 2].item() == BIAS_FORCE  # Transformer
     assert pri[0, 0, 0].item() == BIAS_FORBID
-    assert pri[0, 1, 3].item() == BIAS_FORCE                       # Cheap
-    assert pri[0, 2, 1].item() == 20.0                             # Mamba
-    assert pri[0, 3, 2].item() == 25.0                             # JSON -> Transformer
-    assert pri[0, 4, 2].item() == 25.0                             # SQL -> Transformer
-    assert pri[0, 5, 4].item() == BIAS_FORCE                       # Symbolic (5th path)
+    assert pri[0, 1, 3].item() == BIAS_FORCE  # Cheap
+    assert pri[0, 2, 1].item() == 20.0  # Mamba
+    assert pri[0, 3, 2].item() == 25.0  # JSON -> Transformer
+    assert pri[0, 4, 2].item() == 25.0  # SQL -> Transformer
+    assert pri[0, 5, 4].item() == BIAS_FORCE  # Symbolic (5th path)
 
     # tokenizer-bound resolution with a mock tokenizer
     class MockTok:
@@ -59,7 +72,9 @@ def test_2_tokenizer_bound_rules_engine() -> None:
         def convert_tokens_to_ids(self, t):
             return {"+": 43, "-": 45, "{": 123, "SELECT": 83}.get(t, -1)
 
-    engine_tok = TokenizerBoundRulesEngine(num_paths=5, tokenizer=MockTok(), device=device)
+    engine_tok = TokenizerBoundRulesEngine(
+        num_paths=5, tokenizer=MockTok(), device=device
+    )
     assert engine_tok.math_operators.issuperset({43, 45})
     assert 123 in engine_tok.json_tokens
     assert 83 in engine_tok.sql_tokens
@@ -71,24 +86,38 @@ def test_3_symbolic_expert_and_domain_solvers() -> None:
     lm_head = torch.randn(vocab, hidden, device=device)
 
     # 3a. Digit squaring (default)
-    expert_sq = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="digit_squaring").to(device)
+    expert_sq = VectorizedSymbolicExpert(
+        hidden, vocab, lm_head, domain="digit_squaring"
+    ).to(device)
     ids_in = torch.tensor([[50, 53, 100]], device=device)  # '2','5',other
     assert expert_sq._solver(ids_in).tolist() == [[52, 53, 100]]
 
     # 3b. Arithmetic eval
-    expert_arith = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="arithmetic_eval").to(device)
+    expert_arith = VectorizedSymbolicExpert(
+        hidden, vocab, lm_head, domain="arithmetic_eval"
+    ).to(device)
     ids_arith = torch.tensor([[43, 50, 45, 53]], device=device)  # '+', '2', '-', '5'
-    assert expert_arith._solver(ids_arith).tolist() == [[43, 51, 45, 52]]  # '2'+1='3', '5'-1='4'
+    assert expert_arith._solver(ids_arith).tolist() == [
+        [43, 51, 45, 52]
+    ]  # '2'+1='3', '5'-1='4'
 
     # 3c. SAT Boolean solver
-    expert_sat = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="sat_boolean").to(device)
+    expert_sat = VectorizedSymbolicExpert(
+        hidden, vocab, lm_head, domain="sat_boolean"
+    ).to(device)
     ids_sat = torch.tensor([[126, 48, 33, 49]], device=device)  # '~', '0', '!', '1'
-    assert expert_sat._solver(ids_sat).tolist() == [[126, 49, 33, 48]]  # ~0 -> 1, !1 -> 0
+    assert expert_sat._solver(ids_sat).tolist() == [
+        [126, 49, 33, 48]
+    ]  # ~0 -> 1, !1 -> 0
 
     # 3d. AST Transformer solver
-    expert_ast = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="ast_transformer").to(device)
+    expert_ast = VectorizedSymbolicExpert(
+        hidden, vocab, lm_head, domain="ast_transformer"
+    ).to(device)
     ids_ast = torch.tensor([[40, 93, 40, 125]], device=device)  # '(', ']', '(', '}'
-    assert expert_ast._solver(ids_ast).tolist() == [[40, 41, 40, 41]]  # corrected to ')'
+    assert expert_ast._solver(ids_ast).tolist() == [
+        [40, 41, 40, 41]
+    ]  # corrected to ')'
 
     # 3e. Custom registered solver
     def custom_rot13(t: torch.Tensor) -> torch.Tensor:
@@ -96,7 +125,9 @@ def test_3_symbolic_expert_and_domain_solvers() -> None:
 
     register_solver("rot13", custom_rot13)
     assert "rot13" in SOLVER_REGISTRY
-    expert_rot = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="rot13").to(device)
+    expert_rot = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="rot13").to(
+        device
+    )
     ids_rot = torch.tensor([[65, 66]], device=device)  # 'A', 'B'
     assert expert_rot._solver(ids_rot).tolist() == [[78, 79]]  # 'N', 'O'
 
@@ -105,8 +136,9 @@ def test_3_symbolic_expert_and_domain_solvers() -> None:
     out = expert_sq(h)
     target_weights = torch.randn_like(out)
     (out * target_weights).sum().backward()
-    assert h.grad is not None and bool((h.grad != 0).any()), \
-        "STE gradient blocked (decorative argmax bug present)"
+    assert h.grad is not None and bool(
+        (h.grad != 0).any()
+    ), "STE gradient blocked (decorative argmax bug present)"
 
 
 def test_4_output_verifier_guardrails() -> None:
@@ -114,7 +146,7 @@ def test_4_output_verifier_guardrails() -> None:
     dec = torch.tensor([[40, 40, 41, 7], [40, 41, 5, 6]])  # unbal / balanced
     logits4 = torch.zeros(2, 64)
     corr = verifier.verify_and_correct_logits(dec, logits4)
-    assert corr[0, 41].item() == 50.0        # needs close -> biased
+    assert corr[0, 41].item() == 50.0  # needs close -> biased
     assert corr[1, 41].item() == BIAS_FORBID  # balanced -> forbidden
 
 
@@ -123,13 +155,25 @@ def test_5_end_to_end_nesy_decoder_layer() -> None:
     engine = TokenizerBoundRulesEngine(num_paths=5, device=device)
     vocab, hidden = 128, 32
     lm_head = torch.randn(vocab, hidden, device=device)
-    expert_sq = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="digit_squaring").to(device)
+    expert_sq = VectorizedSymbolicExpert(
+        hidden, vocab, lm_head, domain="digit_squaring"
+    ).to(device)
 
-    cfg = DAPHConfig(hidden_size=32, intermediate_size=64,
-                     num_attention_heads=2, state_size=8, num_experts=2,
-                     num_paths=5, routing_granularity="token", dropout=0.0)
-    layer = NeSyDecoderLayer(cfg, rules_engine=engine,
-                             symbolic_expert=expert_sq).to(device).eval()
+    cfg = DAPHConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_attention_heads=2,
+        state_size=8,
+        num_experts=2,
+        num_paths=5,
+        routing_granularity="token",
+        dropout=0.0,
+    )
+    layer = (
+        NeSyDecoderLayer(cfg, rules_engine=engine, symbolic_expert=expert_sq)
+        .to(device)
+        .eval()
+    )
     xh = torch.randn(2, 6, 32, device=device)
     tok = torch.tensor([[43, 7, 8, 123, 83, 35], [7, 8, 9, 10, 11, 12]], device=device)
     out, meta = layer(xh, token_ids=tok)
@@ -154,19 +198,17 @@ def test_6_re_embed_alignment() -> None:
     lm_head6 = torch.randn(vocab6, hidden6, device=device)
     expert6 = VectorizedSymbolicExpert(hidden6, vocab6, lm_head6).to(device)
     assert torch.equal(expert6.re_embed.weight, lm_head6), (
-        "re_embed not initialized from lm_head fallback "
-        "(random-init bug present)"
+        "re_embed not initialized from lm_head fallback " "(random-init bug present)"
     )
-    assert expert6.re_embed.weight.requires_grad, (
-        "re_embed must stay trainable"
-    )
+    assert expert6.re_embed.weight.requires_grad, "re_embed must stay trainable"
     # explicit token-embedding source takes precedence
     tok_emb6 = torch.randn(vocab6, hidden6, device=device)
     expert6b = VectorizedSymbolicExpert(
         hidden6, vocab6, lm_head6, token_embeddings_weight=tok_emb6
     ).to(device)
-    assert torch.equal(expert6b.re_embed.weight, tok_emb6), \
-        "re_embed ignored the provided token_embeddings_weight"
+    assert torch.equal(
+        expert6b.re_embed.weight, tok_emb6
+    ), "re_embed ignored the provided token_embeddings_weight"
 
 
 def test_7_over_closed_bracket_guardrail() -> None:
@@ -175,8 +217,7 @@ def test_7_over_closed_bracket_guardrail() -> None:
     logits7 = torch.zeros(1, 64)
     corr7 = verifier7.verify_and_correct_logits(dec7, logits7)
     assert corr7[0, 41].item() <= BIAS_FORBID, (
-        f"over-closed sequence left close-token unpenalized: "
-        f"{corr7[0, 41].item()}"
+        f"over-closed sequence left close-token unpenalized: " f"{corr7[0, 41].item()}"
     )
     # needs-close behavior preserved for genuinely unbalanced sequences
     dec7b = torch.tensor([[40, 40, 41, 7]])
@@ -205,11 +246,13 @@ def test_8_subword_vocab_map() -> None:
 
 def test_9_subword_sequence_bridge() -> None:
     device = _get_device()
-    
+
     class DummyTokenizer:
         pad_token_id = 0
+
         def decode(self, ids, skip_special_tokens=True):
             return "2 + 2"
+
         def encode(self, text, add_special_tokens=False):
             return [50, 43, 50]
 
@@ -221,7 +264,9 @@ def test_9_subword_sequence_bridge() -> None:
 
 def test_10_expanded_grammar_verifiers() -> None:
     # JSON verifier
-    json_v = JSONOutputVerifier(open_brace=123, close_brace=125, open_bracket=91, close_bracket=93, eos_token=2)
+    json_v = JSONOutputVerifier(
+        open_brace=123, close_brace=125, open_bracket=91, close_bracket=93, eos_token=2
+    )
     dec_json = torch.tensor([[123, 91, 10]])  # unclosed brace and bracket
     logits = torch.zeros(1, 128)
     corr = json_v.verify_and_correct_logits(dec_json, logits)
@@ -230,7 +275,9 @@ def test_10_expanded_grammar_verifiers() -> None:
     assert corr[0, 2].item() == BIAS_FORBID
 
     # SQL verifier
-    sql_v = SQLOutputVerifier(select_token=83, from_token=70, semicolon_token=59, eos_token=2)
+    sql_v = SQLOutputVerifier(
+        select_token=83, from_token=70, semicolon_token=59, eos_token=2
+    )
     dec_sql = torch.tensor([[83, 10, 20]])  # SELECT without FROM or semicolon
     corr_sql = sql_v.verify_and_correct_logits(dec_sql, logits)
     assert corr_sql[0, 70].item() == 30.0
@@ -250,14 +297,24 @@ def test_10_expanded_grammar_verifiers() -> None:
 
 def test_11_layer_selective_topology() -> None:
     device = _get_device()
-    cfg = DAPHConfig(hidden_size=32, intermediate_size=64, num_attention_heads=2, state_size=8, num_paths=5)
-    
+    cfg = DAPHConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_attention_heads=2,
+        state_size=8,
+        num_paths=5,
+    )
+
     # Layer 0: active for symbolic
-    layer0 = NeSyDecoderLayer(cfg, layer_idx=0, active_symbolic_layers={0, 2}).to(device)
+    layer0 = NeSyDecoderLayer(cfg, layer_idx=0, active_symbolic_layers={0, 2}).to(
+        device
+    )
     assert layer0.is_symbolic_active()
 
     # Layer 1: inactive for symbolic
-    layer1 = NeSyDecoderLayer(cfg, layer_idx=1, active_symbolic_layers={0, 2}).to(device)
+    layer1 = NeSyDecoderLayer(cfg, layer_idx=1, active_symbolic_layers={0, 2}).to(
+        device
+    )
     assert not layer1.is_symbolic_active()
 
 
