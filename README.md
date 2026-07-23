@@ -149,17 +149,22 @@ Executes exact GPU-vectorized logic over tensor batches:
 * **`arithmetic` / `arithmetic_eval`**: Evaluates `+`, `-`, `*` over digit tokens based on preceding operators.
 * **`sat` / `sat_boolean`**: Flips Boolean bit tokens (`'0'` $\leftrightarrow$ `'1'`) under `NOT` (`~`, `!`) operations.
 * **`ast` / `ast_transformer`**: Canonicalizes mismatched closing delimiters (`]`, `}`) following `(`.
+* **`SubwordSequenceBridge`**: Handles multi-token subword tokenizers (BPE, SentencePiece) by decoding to text, executing string-level solvers, and re-encoding back to aligned token tensors.
+* **`build_subword_vocab_map(tokenizer)`**: Precomputes a GPU-native lookup table (`vocab_map`) mapping subword vocabulary token IDs to solver target IDs in $O(1)$ time.
 * **`register_solver(name, fn)`**: Allows registering custom PyTorch tensor routines dynamically.
 
-### 4. `NeSyOutputVerifier`
-Post-hoc decoding guardrail that analyzes generation state and modifies next-token logits:
+### 4. `NeSyOutputVerifier` & Structured Grammar Guardrails
+Post-hoc decoding guardrails that analyze generation state and modify next-token logits:
 ```python
 logits = verifier.verify_and_correct_logits(generated_ids, next_token_logits)
 ```
-Enforces open/close bracket counts across batch sequences in parallel.
+* **`NeSyOutputVerifier`**: Enforces open/close bracket counts across batch sequences in parallel.
+* **`JSONOutputVerifier`**: Enforces `{}` brace and `[]` bracket balance while forbidding premature `EOS` tokens when structures remain open.
+* **`SQLOutputVerifier`**: Enforces SQL clause sequence (`SELECT` $\rightarrow$ `FROM`) and semicolon termination.
+* **`FSMGrammarVerifier`**: Evaluates active state transitions over Finite State Machine lookup tables and masks disallowed next-tokens.
 
 ### 5. `NeSyDecoderLayer`
-Integrates System 1 hybrid processing with System 2 symbolic routing seamlessly without altering the core DAPH execution signature:
+Integrates System 1 hybrid processing with System 2 symbolic routing seamlessly without altering the core DAPH execution signature. Supports layer-selective topology (`layer_idx`, `active_symbolic_layers`) and cached symbolic output reuse (`_get_cached_symbolic_out`):
 ```python
 output, meta = nesy_layer(
     hidden_states,
@@ -321,6 +326,19 @@ Run it via:
 python3 run_model_merge.py
 ```
 
+### 3. Quantitative Evaluation & Experiment Suite (`run_experiments.py`)
+An automated quantitative evaluation and scale sweep suite [run_experiments.py](run_experiments.py). It:
+1. Builds calibration datasets (150 samples/domain) and held-out evaluation sets (150 samples/domain).
+2. Measures baseline shift cross-entropy NLL and perplexity for the base model and individual experts.
+3. Computes explicit task vector interference metrics (cosine similarity, 72.01% sign conflict ratio, task vector norms).
+4. Executes multi-scale sweeps ($\lambda \in [0.0, 1.0]$) across merge baselines (Simple Task Arithmetic, Plain Averaging, TIES-only, DARE+TIES, Fisher-only, and Full ExFusion).
+5. Computes Domain Retention Scores $R_d(\lambda)$ and saves machine-readable JSON artifacts (`artifacts/experiment_results.json`).
+
+Run it via:
+```bash
+python3 run_experiments.py
+```
+
 ---
 
 ## 🧪 Verification & Testing
@@ -339,17 +357,20 @@ python3 daph_hybrid_exfusion_v2_3.py
 
 ### Test Results
 ```
-======================================================================
-1. symbolic priors mandate paths before softmax (5-path router): OK
-2. tokenizer-bound rules engine (extended grammars + 5-path priors): OK
-3. vectorized symbolic expert (domain solvers + custom registry + STE grad): OK
-4. NeSy output verifier (bracket guardrail): OK
-5. end-to-end NeSyDecoderLayer (5-path + priors + expert + grads): OK
-6. re_embed aligned init (fallback + explicit source): OK
-7. over-closed bracket guardrail (BIAS_FORBID): OK
+Running DAPH NeSy-MoE v1.1 Extended test suite...
+1. symbolic priors mandate paths before softmax: OK
+2. tokenizer-bound rules engine: OK
+3. vectorized symbolic expert & domain solvers: OK
+4. output verifier guardrails: OK
+5. end-to-end NeSyDecoderLayer: OK
+6. re_embed alignment: OK
+7. over-closed bracket guardrail: OK
+8. subword vocabulary mapping: OK
+9. subword sequence bridge: OK
+10. expanded grammar verifiers (JSON, SQL, FSM): OK
+11. layer-selective routing topology: OK
 
-All NeSy-MoE v1.0 (v1.1 Extended) tests passed (executed live).
-======================================================================
+All 11 NeSy-MoE v1.1 Extended tests passed (executed live).
 ```
 
 ---
@@ -362,12 +383,14 @@ All NeSy-MoE v1.0 (v1.1 Extended) tests passed (executed live).
 ├── daph_hybrid_exfusion_v2_3.py # Base DAPH Mamba/Attention Hybrid & Model Merging
 ├── test_nesy_v1_0.py          # Live test suite (11 comprehensive test groups)
 ├── benchmark_nesy.py          # Automated performance & VRAM profiling suite
+├── run_experiments.py         # Quantitative experiment runner & RESULTS.md generator
 ├── run_model.py               # Pretrained Hugging Face model runner & NeSy pipeline
 ├── run_model_merge.py         # Multi-expert Hugging Face model merging runner
+├── artifacts/                 # Saved experiment evaluation artifacts & JSON sweep data
 ├── RESULTS.md                 # Official live test, benchmark & merging results
 ├── ISSUES.md                  # Issues tracking & architectural roadmap
 ├── README.md                  # Detailed architecture & API documentation
-├── LICENSE                    # MIT License
+├── LICENSE                    # Apache License 2.0
 └── .gitignore                 # Python & PyTorch cache ignores
 ```
 
@@ -389,6 +412,19 @@ $$\mathbf{h}_{\text{symbolic}} = \mathbf{e}_{\text{STE}} E$$
 ### 3. Context Preservation Gating
 $$\mathbf{h}_{\text{out}} = \text{LayerNorm}\left( (1 - \sigma(\alpha)) \cdot \mathbf{h}_{\text{symbolic}} + \sigma(\alpha) \cdot \mathbf{h} \right)$$
 where $\alpha \in \mathbb{R}$ is a learnable gate initialized to $0.1$.
+
+### 4. ExFusion Model Construction Optimization Objective
+For base model parameters $\theta_B$ and expert task vectors $\Delta_i = \theta_i - \theta_B$:
+$$\max_{\theta^*} \left[ \sum_{d=1}^D R_d(\theta^*) - \alpha \cdot I(\theta^*) - \beta \cdot D_B(\theta^*) \right]$$
+where Domain Retention Score $R_d(\lambda)$ is defined over shift cross-entropy NLL:
+$$R_d(\lambda) = \frac{\text{NLL}_{\text{base}, d} - \text{NLL}_{\text{merged}, d}(\lambda)}{\text{NLL}_{\text{base}, d} - \text{NLL}_{\text{expert}, d}} \times 100\%$$
+
+### 5. TIES v2 Pure Sign Consensus & Fisher Weighting
+Given trimmed task vectors $\tilde{\Delta}_i$ and expert weights $w_i$:
+$$\text{Vote} = \sum_{i=1}^E w_i \cdot \text{Sign}(\tilde{\Delta}_i), \quad \text{ElectedSign} = \text{Sign}(\text{Vote})$$
+$$\Delta_{\text{TIES}} = \frac{\sum_{i=1}^E w_i \cdot \tilde{\Delta}_i \cdot \mathbf{1}_{\text{Sign}(\tilde{\Delta}_i) = \text{ElectedSign}}}{\max\left(\sum_{i=1}^E w_i \cdot \mathbf{1}_{\text{Sign}(\tilde{\Delta}_i) = \text{ElectedSign}}, \epsilon\right)}$$
+Empirical Fisher diagonal matrix elements $F_{kk} = \frac{1}{N} \sum_{n=1}^N \left( \frac{\partial \mathcal{L}_n}{\partial \theta_k} \right)^2$ modulate the Fisher merged delta:
+$$\Delta_{\text{Fisher}} = \frac{\sum_{i=1}^E w_i \cdot F_{i, kk}^\gamma \cdot \tilde{\Delta}_{i, k}}{\max\left(\sum_{i=1}^E w_i \cdot F_{i, kk}^\gamma \cdot M_{\text{DARE}, i, k}, \epsilon\right)}$$
 
 ---
 

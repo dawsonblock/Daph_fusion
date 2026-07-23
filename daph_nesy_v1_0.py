@@ -491,7 +491,9 @@ class VectorizedSymbolicExpert(nn.Module):
         token IDs to their solver-transformed target token IDs."""
         device = self.de_embed.weight.device
         # Pass 2D tensor (1, V) so sequential solvers can execute token_ids[:, :-1]
-        mapping = torch.arange(self.vocab_size, dtype=torch.long, device=device).unsqueeze(0)
+        mapping = torch.arange(
+            self.vocab_size, dtype=torch.long, device=device
+        ).unsqueeze(0)
         solved_mapping_2d = self._solver(mapping)
         solved_mapping = solved_mapping_2d.squeeze(0)  # Squeeze back to (V,)
         self.register_buffer("vocab_map", solved_mapping, persistent=True)
