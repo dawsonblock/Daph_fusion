@@ -25,7 +25,7 @@ System 2 (reasoning): GPU-parallel, differentiable neurosymbolic execution:
                                 blended via weight knob.
 
 Requires: daph_hybrid_exfusion_v2_3.py (same directory or import path).
-License: MIT
+License: Apache 2.0
 """
 
 from __future__ import annotations
@@ -85,8 +85,15 @@ class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
         if priors is None:
             return logits
         priors = priors.to(logits.device, logits.dtype)
-        if priors.dim() == 2:  # (B, P) -> broadcast over L
+
+        # Safely align prior dimensions against router logits shape
+        if priors.dim() == 2 and logits.dim() == 3:
+            # Broadcast batch-level prior (B, P) -> (B, 1, P) for token logits (B, L, P)
             priors = priors.unsqueeze(1)
+        elif priors.dim() == 3 and logits.dim() == 2:
+            # Pool token-level prior (B, L, P) -> (B, P) for batch logits (B, P)
+            priors = priors.mean(dim=1)
+
         if priors.shape[-1] != logits.shape[-1]:
             raise ValueError(
                 f"symbolic_priors last dim {priors.shape[-1]} != "
@@ -216,7 +223,10 @@ class TokenizerBoundRulesEngine:
         symbolic_bias: float = BIAS_FORCE,
     ) -> Tensor:
         """Vectorized rule evaluation -> (B, L, num_paths) priors."""
-        token_ids = token_ids.to(self.device)
+        # Auto-align engine buffers if token_ids arrives on a different device
+        if token_ids.device != self.device:
+            self.to(token_ids.device)
+
         B, L = token_ids.shape
         priors = torch.zeros(B, L, self.num_paths, device=self.device)
 
@@ -480,8 +490,10 @@ class VectorizedSymbolicExpert(nn.Module):
         """Precomputes a GPU-native lookup table mapping subword vocabulary
         token IDs to their solver-transformed target token IDs."""
         device = self.de_embed.weight.device
-        mapping = torch.arange(self.vocab_size, dtype=torch.long, device=device)
-        solved_mapping = self._solver(mapping)
+        # Pass 2D tensor (1, V) so sequential solvers can execute token_ids[:, :-1]
+        mapping = torch.arange(self.vocab_size, dtype=torch.long, device=device).unsqueeze(0)
+        solved_mapping_2d = self._solver(mapping)
+        solved_mapping = solved_mapping_2d.squeeze(0)  # Squeeze back to (V,)
         self.register_buffer("vocab_map", solved_mapping, persistent=True)
         return solved_mapping
 
@@ -516,6 +528,16 @@ class VectorizedSymbolicExpert(nn.Module):
 # =============================================================================
 
 
+def _safe_add_bias(logits: Tensor, mask: Tensor, token_id: int, bias: float) -> None:
+    if 0 <= token_id < logits.shape[-1]:
+        logits[mask, token_id] += bias
+
+
+def _safe_set_bias(logits: Tensor, mask: Tensor, token_id: int, bias: float) -> None:
+    if 0 <= token_id < logits.shape[-1]:
+        logits[mask, token_id] = bias
+
+
 class NeSyOutputVerifier:
     """Post-hoc System-2 guardrail over next-token logits.
 
@@ -544,8 +566,8 @@ class NeSyOutputVerifier:
         corrected = next_token_logits.clone()
         needs_close = opens > closes
         forbid_close = opens <= closes
-        corrected[needs_close, self.close_token] += self.close_bias
-        corrected[forbid_close, self.close_token] = BIAS_FORBID
+        _safe_add_bias(corrected, needs_close, self.close_token, self.close_bias)
+        _safe_set_bias(corrected, forbid_close, self.close_token, BIAS_FORBID)
         return corrected
 
 
@@ -578,14 +600,14 @@ class JSONOutputVerifier(NeSyOutputVerifier):
         close_b = (decoded_tokens == self.close_bracket).sum(dim=1)
         needs_bracket = open_b > close_b
         forbid_bracket = open_b <= close_b
-        corrected[needs_bracket, self.close_bracket] += self.close_bias
-        corrected[forbid_bracket, self.close_bracket] = BIAS_FORBID
+        _safe_add_bias(corrected, needs_bracket, self.close_bracket, self.close_bias)
+        _safe_set_bias(corrected, forbid_bracket, self.close_bracket, BIAS_FORBID)
 
         # Forbid EOS token if JSON braces/brackets are still unclosed
         open_br = (decoded_tokens == self.open_token).sum(dim=1)
         close_br = (decoded_tokens == self.close_token).sum(dim=1)
         unclosed = (open_br > close_br) | (open_b > close_b)
-        corrected[unclosed, self.eos_token] = BIAS_FORBID
+        _safe_set_bias(corrected, unclosed, self.eos_token, BIAS_FORBID)
         return corrected
 
 
@@ -618,11 +640,11 @@ class SQLOutputVerifier:
 
         # SELECT present but missing FROM -> bias FROM keyword
         needs_from = has_select & ~has_from
-        corrected[needs_from, self.from_token] += self.clause_bias
+        _safe_add_bias(corrected, needs_from, self.from_token, self.clause_bias)
 
         # Query in progress without semicolon -> forbid premature EOS
         incomplete = has_select & ~has_semi
-        corrected[incomplete, self.eos_token] = BIAS_FORBID
+        _safe_set_bias(corrected, incomplete, self.eos_token, BIAS_FORBID)
         return corrected
 
 
@@ -658,10 +680,12 @@ class FSMGrammarVerifier:
 
             if curr_state in self.state_allowed_tokens:
                 allowed = self.state_allowed_tokens[curr_state]
-                if allowed:
+                vocab_size = corrected.shape[-1]
+                allowed_valid = {t for t in allowed if 0 <= t < vocab_size}
+                if allowed_valid:
                     mask = torch.full_like(corrected[b], BIAS_FORBID)
                     indices = torch.tensor(
-                        list(allowed), device=corrected.device, dtype=torch.long
+                        list(allowed_valid), device=corrected.device, dtype=torch.long
                     )
                     mask[indices] = corrected[b, indices]
                     corrected[b] = mask

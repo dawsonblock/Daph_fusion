@@ -5,7 +5,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyTorch Version](https://img.shields.io/badge/pytorch-2.1%2B-ee4c2c.svg)](https://pytorch.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/tests-11%2F11%20passing-brightgreen.svg)]()
 [![Architecture](https://img.shields.io/badge/architecture-5--Path%20NeSy--MoE-purple.svg)](daph_nesy_v1_0.py)
 
@@ -394,7 +394,7 @@ where $\alpha \in \mathbb{R}$ is a learnable gate initialized to $0.1$.
 
 ## 📄 License & Citation
 
-Distributed under the **MIT License**. See [LICENSE](LICENSE) for more information.
+Distributed under the **Apache License 2.0**. See [LICENSE](LICENSE) for more information.
 
 ```bibtex
 @software{daph_nesy_moe_2026,

@@ -51,7 +51,7 @@ v2.3 hardening (tenth external review):
     point for native kernels (e.g. mamba_ssm/Triton) with graceful fallback
     to the compiled/eager FP32 scan.
 
-License: MIT
+License: Apache 2.0
 """
 
 from __future__ import annotations
@@ -1654,7 +1654,7 @@ class DAPHHybridDecoderLayer(nn.Module):
 
             # Token-level hard routing: sequence-dependent paths (Attention,
             # Mamba) run on the full sequence; POINTWISE paths (Trans-ExFusion,
-            # Cheap) use sparse gather/scatter over only the selected tokens,
+            # Cheap, Symbolic) use sparse gather/scatter over only the selected tokens,
             # preserving each token's own difficulty values.
             token_level = selected.dim() == 2
             if token_level:
@@ -1666,7 +1666,7 @@ class DAPHHybridDecoderLayer(nn.Module):
                 point_paths = [
                     p
                     for p in required_paths
-                    if p in (self.TRANSFORMER_PATH, self.CHEAP_PATH)
+                    if p not in (self.ATTENTION_PATH, self.MAMBA_PATH)
                 ]
             else:
                 seq_paths = required_paths
