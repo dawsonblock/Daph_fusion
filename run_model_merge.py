@@ -91,9 +91,9 @@ def main():
 
     # Build empirical calibration batch for Empirical Fisher Diagonal Weighting
     calib_samples = [
-        "Dear Team, I am writing to share an update regarding the project.",
-        "A highly detailed digital painting of a futuristic city, 8k, trending on artstation.",
-        "In psychological terms, emotional resilience is defined as the capacity to adapt.",
+        "Solve the algebraic expression: If 2x + 3 = 11, then x = (11 - 3) / 2 = 4.",
+        "Step-by-step execution plan: Step 1: Initialize resources. Step 2: Resolve dependencies.",
+        "def binary_search(arr: list[int], target: int) -> int:\n    low, high = 0, len(arr) - 1",
     ]
     calibration_batch = tokenizer(calib_samples, return_tensors="pt", padding=True)
 
@@ -122,16 +122,16 @@ def main():
 
     test_prompts = [
         (
-            "Email / Business Writing",
-            "Dear Team,\nI am writing to share an update regarding",
+            "Math / Problem Solving",
+            "Solve the algebraic equation step by step: If 3x + 5 = 20, then",
         ),
         (
-            "Art / Stable Diffusion Prompt",
-            "A highly detailed digital painting of a futuristic city with",
+            "Planning / Strategy Execution",
+            "Task Execution Plan: Step 1: Allocate computing resources. Step 2:",
         ),
         (
-            "Psychology & Dialogue",
-            "In psychological terms, emotional resilience is defined as",
+            "Coding / Software Engineering",
+            "def calculate_moving_average(data: list[float], window_size: int) -> list[float]:\n",
         ),
     ]
 

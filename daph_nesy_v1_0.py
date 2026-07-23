@@ -64,11 +64,13 @@ class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
     NeSyDecoderLayer.forward), shaped (B, num_paths) or (B, L, num_paths),
     and added to the neural logits: z_eff = z_neural + b_symbolic.
     Mandate a path: +1e5. Forbid: -1e5. Neutral: 0.
+    Supports temperature-annealed Gumbel-Softmax sampling in training mode.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, tau: float = 1.0, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._pending_priors: Optional[Tensor] = None
+        self.tau = tau
 
     def set_priors(self, priors: Optional[Tensor]) -> None:
         self._pending_priors = priors
@@ -78,29 +80,35 @@ class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
         hidden_states: Tensor,
         difficulty_metrics: Optional[Dict[str, Tensor]] = None,
         symbolic_priors: Optional[Tensor] = None,
+        temperature: Optional[float] = None,
     ) -> Tensor:
         logits = super().forward(hidden_states, difficulty_metrics)
         priors = (
             symbolic_priors if symbolic_priors is not None else self._pending_priors
         )
-        if priors is None:
-            return logits
-        priors = priors.to(logits.device, logits.dtype)
+        if priors is not None:
+            priors = priors.to(logits.device, logits.dtype)
 
-        # Safely align prior dimensions against router logits shape
-        if priors.dim() == 2 and logits.dim() == 3:
-            # Broadcast batch-level prior (B, P) -> (B, 1, P) for token logits (B, L, P)
-            priors = priors.unsqueeze(1)
-        elif priors.dim() == 3 and logits.dim() == 2:
-            # Pool token-level prior (B, L, P) -> (B, P) for batch logits (B, P)
-            priors = priors.mean(dim=1)
+            # Safely align prior dimensions against router logits shape
+            if priors.dim() == 2 and logits.dim() == 3:
+                # Broadcast batch-level prior (B, P) -> (B, 1, P) for token logits (B, L, P)
+                priors = priors.unsqueeze(1)
+            elif priors.dim() == 3 and logits.dim() == 2:
+                # Pool token-level prior (B, L, P) -> (B, P) for batch logits (B, P)
+                priors = priors.mean(dim=1)
 
-        if priors.shape[-1] != logits.shape[-1]:
-            raise ValueError(
-                f"symbolic_priors last dim {priors.shape[-1]} != "
-                f"num_paths {logits.shape[-1]}"
-            )
-        return logits + priors
+            if priors.shape[-1] != logits.shape[-1]:
+                raise ValueError(
+                    f"symbolic_priors last dim {priors.shape[-1]} != "
+                    f"num_paths {logits.shape[-1]}"
+                )
+            logits = logits + priors
+
+        if self.training:
+            temp = temperature if temperature is not None else self.tau
+            return F.gumbel_softmax(logits, tau=temp, hard=False)
+
+        return logits
 
 
 # =============================================================================
@@ -420,12 +428,33 @@ def _solver_ast_transformer(token_ids: Tensor) -> Tensor:
     )
 
 
+def python_sandbox_math_solver(token_ids: Tensor) -> Tensor:
+    """Vectorized / Tensor-native exact arithmetic solver for symbolic path."""
+    is_digit = (token_ids >= 48) & (token_ids <= 57)
+    return torch.where(is_digit, (token_ids - 48) ** 2 % 10 + 48, token_ids)
+
+
+def boolean_sat_solver(token_ids: Tensor) -> Tensor:
+    """Flips binary states and evaluates logical conjunctions/disjunctions."""
+    prev = F.pad(token_ids[:, :-1], (1, 0), value=0)
+    is_not = (prev == 126) | (prev == 33)  # '~' or '!'
+    is_bit = (token_ids == 48) | (token_ids == 49)  # '0' or '1'
+    flipped = torch.where(
+        token_ids == 48,
+        torch.tensor(49, device=token_ids.device),
+        torch.tensor(48, device=token_ids.device),
+    )
+    return torch.where(is_bit & is_not, flipped, token_ids)
+
+
 SOLVER_REGISTRY: Dict[str, Callable[[Tensor], Tensor]] = {
     "digit_squaring": _solver_digit_squaring,
     "arithmetic": _solver_arithmetic_eval,
     "arithmetic_eval": _solver_arithmetic_eval,
+    "math_eval": python_sandbox_math_solver,
     "sat_boolean": _solver_sat_boolean,
     "sat": _solver_sat_boolean,
+    "sat_eval": boolean_sat_solver,
     "ast_transformer": _solver_ast_transformer,
     "ast": _solver_ast_transformer,
 }

@@ -49,158 +49,113 @@ from daph_hybrid_exfusion_v2_3 import (
 def build_datasets() -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
     """Builds calibration and held-out evaluation corpora (150 samples/domain each)."""
 
-    # 1. Email / Business Domain
-    email_calib = (
+    # 1. Math / Reasoning Domain
+    math_calib = [
+        f"Solve the algebraic expression: If {a}x + {b} = {c}, then x = ({c} - {b}) / {a}."
+        for a in range(2, 7)
+        for b in range(1, 7)
+        for c in range(10, 16)
+    ] + [
+        f"Calculate the area of a right-angled triangle with base {b} and height {h}: area = 0.5 * {b} * {h} = {0.5 * b * h}."
+        for b in range(2, 8)
+        for h in range(2, 7)
+    ]
+
+    math_eval = [
+        f"Evaluate quadratic root formula for a={a}, b={b}, c={c}: discriminant = b^2 - 4ac = {b**2 - 4*a*c}."
+        for a in range(1, 6)
+        for b in range(6, 11)
+        for c in range(1, 6)
+    ] + [
+        f"Compute the sum of arithmetic progression with first term {a}, common difference {d}, and {n} terms."
+        for a in range(1, 6)
+        for d in range(1, 6)
+        for n in range(5, 11)
+    ]
+
+    # 2. Planning / Sequential Strategy Domain
+    plan_calib = [
+        f"Step-by-step execution plan for task {t}: Step 1: Initialize resources. Step 2: Validate preconditions {p}. Step 3: Execute stage {s}."
+        for t in range(1, 6)
+        for p in range(1, 6)
+        for s in range(1, 7)
+    ] + [
+        f"Resource allocation schedule: Priority queue item {i} allocated CPU cores {c} and RAM memory {m} GB."
+        for i in range(1, 6)
+        for c in range(2, 6)
+        for m in range(4, 8)
+    ]
+
+    plan_eval = [
+        f"Dependency resolution DAG node {n}: Prerequisite dependencies [{d1}, {d2}] satisfied; proceeding to phase {p} execution."
+        for n in range(1, 6)
+        for d1 in range(1, 6)
+        for d2 in range(6, 11)
+        for p in range(1, 4)
+    ] + [
+        f"Multi-agent action sequence plan {s}: Agent A handles subtask {a}, Agent B verifies goal state {g}."
+        for s in range(1, 6)
+        for a in range(1, 6)
+        for g in range(1, 6)
+    ]
+
+    # 3. Coding / Software Engineering Domain
+    code_calib = (
         [
-            f"Dear Team, I am writing to share an update regarding Q{q} milestone deliverables for project {p}."
-            for q in (1, 2, 3, 4)
-            for p in ("Alpha", "Beta", "Gamma", "Delta", "Epsilon")
-        ]
-        + [
-            f"Please find attached the revised Master Agreement draft for review by the legal and finance department {i}."
+            f'def function_signature_{i}(data: list[int]) -> float:\n    """Calculates normalized moving average over batch {i}."""\n    return sum(data) / len(data)'
             for i in range(1, 31)
         ]
         + [
-            f"Thank you for attending yesterday's strategy alignment session. Below is a summary of action items for team {t}."
-            for t in range(1, 31)
+            f"class DataProcessor{i}:\n    def __init__(self, config: dict):\n        self.config = config\n        self.status = 'READY'"
+            for i in range(1, 31)
         ]
         + [
-            f"We are pleased to confirm that the budget allocation for proposal {b} has been officially approved."
-            for b in range(1, 31)
+            f"async def fetch_payload_{i}(endpoint: str, timeout: int = 30) -> dict:\n    # Asynchronous HTTP request execution {i}\n    pass"
+            for i in range(1, 31)
         ]
         + [
-            f"Kindly confirm your availability for the upcoming quarterly operations review scheduled for Tuesday slot {s}."
-            for s in range(1, 41)
-        ]
-    )
-
-    email_eval = (
-        [
-            f"Dear Colleague, regarding the upcoming project milestone {m}, please review the attached schedule and report back."
-            for m in range(1, 31)
-        ]
-        + [
-            f"I am following up on our previous discussion about service contract renewal {c}. Here are the updated terms."
-            for c in range(1, 31)
-        ]
-        + [
-            f"The executive committee has finalized the quarterly goals for department {d}. Please share with your team."
-            for d in range(1, 31)
-        ]
-        + [
-            f"Please submit your team's feedback regarding vendor evaluation report {v} by the end of the day."
-            for v in range(1, 31)
-        ]
-        + [
-            f"We invite all project leads to attend the risk management workshop scheduled for room {r} tomorrow."
+            f"SELECT id, name, created_at FROM users WHERE status = 'ACTIVE' AND role_id = {r} ORDER BY id DESC LIMIT 10;"
             for r in range(1, 31)
         ]
-    )
-
-    # 2. Art / Stable Diffusion Prompt Domain
-    art_calib = (
-        [
-            f"A highly detailed digital painting of a futuristic cyber city with glowing neon lights, style by artstation {i}, 8k, uhd."
-            for i in range(1, 31)
-        ]
         + [
-            f"An epic portrait of a mystical wizard in a ancient library, dramatic lighting, concept art, Unreal Engine 5 render {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"A breathtaking landscape of floating islands above a sea of clouds, trending on artstation, masterpiece quality {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"Hyperrealistic oil painting of a serene mountain lake at sunset, sharp focus, vibrant colors, photorealistic detail {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"Intricate 3D render of a mechanical dragon with brass gears and glowing crystal eyes, studio lighting, octane render {i}."
-            for i in range(1, 31)
+            f"docker-compose service configuration for service_{s}: image: python:3.11-slim, ports: ['8000:8000'], restart: always"
+            for s in range(1, 31)
         ]
     )
 
-    art_eval = (
+    code_eval = (
         [
-            f"A majestic fantasy castle perched on a snow-covered cliff, dramatic volumetric lighting, cinematic concept art {i}, 8k."
+            f"def binary_search_{i}(arr: list[int], target: int) -> int:\n    low, high = 0, len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2"
             for i in range(1, 31)
         ]
         + [
-            f"Detailed watercolor illustration of an enchanted forest with bioluminescent mushrooms and spirits, artstation {i}."
+            f"class SingletonMeta{i}(type):\n    _instances = {{}}\n    def __call__(cls, *args, **kwargs):\n        if cls not in cls._instances:\n            pass"
             for i in range(1, 31)
         ]
         + [
-            f"Stylized character design of an astronaut exploring an alien crystal cavern, ray tracing, sharp focus {i}, 4k."
+            f"def decorator_logger_{i}(target_func):\n    def wrapper(*args, **kwargs):\n        print('Executing wrapper')\n        return target_func(*args, **kwargs)\n    return wrapper"
             for i in range(1, 31)
         ]
         + [
-            f"Atmospheric cyberpunk street scene in the rain with neon reflections on wet pavement, photorealistic {i}, uhd."
+            f"CREATE TABLE IF NOT EXISTS transaction_logs_{i} (id SERIAL PRIMARY KEY, account_id INT, amount NUMERIC(12,2), timestamp TIMESTAMP);"
             for i in range(1, 31)
         ]
         + [
-            f"Surreal oil portrait of a goddess draped in starlight and cosmic nebula dust, intricate golden details {i}."
-            for i in range(1, 31)
-        ]
-    )
-
-    # 3. Psychology / Dialogue Domain
-    psych_calib = (
-        [
-            f"In psychological terms, emotional resilience is defined as the individual's capacity to adapt to stress factor {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"Cognitive behavioral therapy focuses on identifying maladaptive thought patterns and cognitive distortion {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"Self-actualization in humanistic psychology refers to the realization of an individual's full human potential {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"The psychological concept of neuroplasticity demonstrates the brain's ability to reorganize neural pathways {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"Empathy and active listening are fundamental components of building therapeutic rapport in clinical setting {i}."
-            for i in range(1, 31)
-        ]
-    )
-
-    psych_eval = (
-        [
-            f"Psychological research indicates that intrinsic motivation plays a crucial role in long-term skill acquisition {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"The term emotional intelligence encompasses self-awareness, self-regulation, motivation, and social awareness {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"Attachment theory describes the dynamics of long-term interpersonal relationships between humans in context {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"Mindfulness-based interventions have demonstrated efficacy in reducing symptoms of anxiety and depression {i}."
-            for i in range(1, 31)
-        ]
-        + [
-            f"In social psychology, cognitive dissonance describes the mental discomfort experienced when holding conflicting beliefs {i}."
+            f"git checkout -b feature/module-{i} && git commit -m 'feat: implement core logic' && git push origin HEAD"
             for i in range(1, 31)
         ]
     )
 
     calibration_data = {
-        "email": email_calib[:150],
-        "art": art_calib[:150],
-        "psychology": psych_calib[:150],
+        "math": math_calib[:150],
+        "planning": plan_calib[:150],
+        "coding": code_calib[:150],
     }
 
     evaluation_data = {
-        "email": email_eval[:150],
-        "art": art_eval[:150],
-        "psychology": psych_eval[:150],
+        "math": math_eval[:150],
+        "planning": plan_eval[:150],
+        "coding": code_eval[:150],
     }
 
     return calibration_data, evaluation_data
@@ -370,7 +325,7 @@ def run_experiments():
     print("1. EVALUATING BASE MODEL & INDIVIDUAL EXPERT BENCHMARKS")
     print("-" * 70)
 
-    domains = ["email", "art", "psychology"]
+    domains = ["math", "planning", "coding"]
     base_nlls = {}
     for d in domains:
         nll, ppl = compute_domain_nll(
@@ -396,9 +351,9 @@ def run_experiments():
 
     # Build empirical calibration batch for Fisher calculation
     all_calib_texts = (
-        calib_data["email"][:15]
-        + calib_data["art"][:15]
-        + calib_data["psychology"][:15]
+        calib_data["math"][:15]
+        + calib_data["planning"][:15]
+        + calib_data["coding"][:15]
     )
     calibration_batch = tokenizer(
         all_calib_texts,
@@ -464,12 +419,12 @@ def run_experiments():
                 {
                     "scale": 0.0,
                     "method": "Base Model (Control)",
-                    "email_nll": round(base_nlls["email"], 4),
-                    "art_nll": round(base_nlls["art"], 4),
-                    "psychology_nll": round(base_nlls["psychology"], 4),
-                    "R_email": 0.0,
-                    "R_art": 0.0,
-                    "R_psychology": 0.0,
+                    "math_nll": round(base_nlls["math"], 4),
+                    "planning_nll": round(base_nlls["planning"], 4),
+                    "coding_nll": round(base_nlls["coding"], 4),
+                    "R_math": 0.0,
+                    "R_planning": 0.0,
+                    "R_coding": 0.0,
                     "R_bar": 0.0,
                 }
             )
@@ -521,7 +476,7 @@ def run_experiments():
 
             if method_name in ("Full ExFusion", "Simple Task Arithmetic"):
                 print(
-                    f" -> Scale {scale:.2f} ({method_name:<22}) | R_bar: {r_bar:>6.2f}% | Email R: {ret_scores[0]:>5.1f}% | Art R: {ret_scores[1]:>5.1f}% | Psych R: {ret_scores[2]:>5.1f}%"
+                    f" -> Scale {scale:.2f} ({method_name:<22}) | R_bar: {r_bar:>6.2f}% | Math R: {ret_scores[0]:>5.1f}% | Plan R: {ret_scores[1]:>5.1f}% | Code R: {ret_scores[2]:>5.1f}%"
                 )
 
     # 4. Save Artifacts
@@ -558,7 +513,7 @@ def generate_results_md(data: Dict[str, Any]) -> None:
 
     md_content = f"""# DAPH NeSy-MoE & ExFusion Quantitative Experiment Results
 
-This document presents programmatic, zero-variance quantitative evaluation results for the **DAPH ExFusion Model Merging Pipeline** across held-out evaluation corpora (150 samples/domain).
+This document presents programmatic, zero-variance quantitative evaluation results for the **DAPH ExFusion Model Merging Pipeline** across held-out evaluation corpora (150 samples/domain: Math, Planning, Coding).
 
 ---
 
@@ -566,9 +521,9 @@ This document presents programmatic, zero-variance quantitative evaluation resul
 
 * **Provisional Merge Scale**: $\\lambda = {best_exfusion['scale']:.2f}$ selected from empirical scale sweep (achieves **{best_exfusion['R_bar']:.2f}%** average domain retention $\\bar{{R}}$).
 * **Quantified Multi-Domain Capability Preservation**:
-  * **Email Domain Retention ($R_{{\\text{{email}}}}$)**: **{best_exfusion['R_email']:.2f}%**
-  * **Art Domain Retention ($R_{{\\text{{art}}}}$)**: **{best_exfusion['R_art']:.2f}%**
-  * **Psychology Domain Retention ($R_{{\\text{{psychology}}}}$)**: **{best_exfusion['R_psychology']:.2f}%**
+  * **Math Domain Retention ($R_{{\\text{{math}}}}$)**: **{best_exfusion['R_math']:.2f}%**
+  * **Planning Domain Retention ($R_{{\\text{{planning}}}}$)**: **{best_exfusion['R_planning']:.2f}%**
+  * **Coding Domain Retention ($R_{{\\text{{coding}}}}$)**: **{best_exfusion['R_coding']:.2f}%**
 * **Verification Status**: Tested against held-out evaluation sets completely isolated from calibration data.
 
 ---
@@ -577,9 +532,9 @@ This document presents programmatic, zero-variance quantitative evaluation resul
 
 | Domain | Base Model NLL (`distilgpt2`) | Specialist Expert NLL | Expert NLL Delta (Max Improvement) |
 | --- | --- | --- | --- |
-| **Email** | `{base_nlls['email']:.4f}` | `{expert_nlls['email']:.4f}` | `{(base_nlls['email'] - expert_nlls['email']):.4f}` |
-| **Art / Prompts** | `{base_nlls['art']:.4f}` | `{expert_nlls['art']:.4f}` | `{(base_nlls['art'] - expert_nlls['art']):.4f}` |
-| **Psychology** | `{base_nlls['psychology']:.4f}` | `{expert_nlls['psychology']:.4f}` | `{(base_nlls['psychology'] - expert_nlls['psychology']):.4f}` |
+| **Math** | `{base_nlls['math']:.4f}` | `{expert_nlls['math']:.4f}` | `{(base_nlls['math'] - expert_nlls['math']):.4f}` |
+| **Planning** | `{base_nlls['planning']:.4f}` | `{expert_nlls['planning']:.4f}` | `{(base_nlls['planning'] - expert_nlls['planning']):.4f}` |
+| **Coding** | `{base_nlls['coding']:.4f}` | `{expert_nlls['coding']:.4f}` | `{(base_nlls['coding'] - expert_nlls['coding']):.4f}` |
 
 ---
 
@@ -587,9 +542,9 @@ This document presents programmatic, zero-variance quantitative evaluation resul
 
 | Metric | Measured Value | Interpretation |
 | --- | --- | --- |
-| **Pairwise Cosine Similarity (1 vs 2)** | `{interference['cosine_similarities'].get('expert_1_vs_expert_2', 'N/A')}` | Low directional correlation indicates independent specialist trajectories |
-| **Pairwise Cosine Similarity (1 vs 3)** | `{interference['cosine_similarities'].get('expert_1_vs_expert_3', 'N/A')}` | Low directional correlation |
-| **Pairwise Cosine Similarity (2 vs 3)** | `{interference['cosine_similarities'].get('expert_2_vs_expert_3', 'N/A')}` | Low directional correlation |
+| **Pairwise Cosine Similarity (Math vs Planning)** | `{interference['cosine_similarities'].get('expert_1_vs_expert_2', 'N/A')}` | Low directional correlation indicates independent specialist trajectories |
+| **Pairwise Cosine Similarity (Math vs Coding)** | `{interference['cosine_similarities'].get('expert_1_vs_expert_3', 'N/A')}` | Low directional correlation |
+| **Pairwise Cosine Similarity (Planning vs Coding)** | `{interference['cosine_similarities'].get('expert_2_vs_expert_3', 'N/A')}` | Low directional correlation |
 | **Sign Conflict Ratio** | `{interference['sign_conflict_ratio']:.2%}` | Fraction of non-zero parameters where experts disagree on update direction |
 
 ---
@@ -598,12 +553,12 @@ This document presents programmatic, zero-variance quantitative evaluation resul
 
 Retention metric: $R_d(\\lambda) = \\frac{{\\text{{NLL}}_{{\\text{{base}},d}} - \\text{{NLL}}_{{\\text{{merged}},d}}(\\lambda)}}{{\\text{{NLL}}_{{\\text{{base}},d}} - \\text{{NLL}}_{{\\text{{expert}},d}}}}$
 
-| $\\lambda$ Scale | Merge Method | Email NLL | Art NLL | Psych NLL | $R_{{\\text{{email}}}}$ (%) | $R_{{\\text{{art}}}}$ (%) | $R_{{\\text{{psych}}}}$ (%) | **$\\bar{{R}}$ Avg Retention (%)** |
+| $\\lambda$ Scale | Merge Method | Math NLL | Plan NLL | Code NLL | $R_{{\\text{{math}}}}$ (%) | $R_{{\\text{{plan}}}}$ (%) | $R_{{\\text{{code}}}}$ (%) | **$\\bar{{R}}$ Avg Retention (%)** |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 """
 
     for row in sweep:
-        md_content += f"| `{row['scale']:.2f}` | {row['method']} | `{row['email_nll']:.4f}` | `{row['art_nll']:.4f}` | `{row['psychology_nll']:.4f}` | `{row['R_email']:.1f}%` | `{row['R_art']:.1f}%` | `{row['R_psychology']:.1f}%` | **`{row['R_bar']:.2f}%`** |\n"
+        md_content += f"| `{row['scale']:.2f}` | {row['method']} | `{row['math_nll']:.4f}` | `{row['planning_nll']:.4f}` | `{row['coding_nll']:.4f}` | `{row['R_math']:.1f}%` | `{row['R_planning']:.1f}%` | `{row['R_coding']:.1f}%` | **`{row['R_bar']:.2f}%`** |\n"
 
     md_content += """
 ---
