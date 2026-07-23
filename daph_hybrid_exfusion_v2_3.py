@@ -140,15 +140,21 @@ def is_ssm_core_param(
     if allow is not None and any(str(token).lower() in name_lower for token in allow):
         return True
 
-    configured = [str(token).lower() for token in policies.get("ssm_groups", [])]
-    if any(token in name_lower for token in configured):
-        return True
-
+    ssm_groups = policies.get("ssm_groups", DEFAULT_MAMBA_POLICIES["ssm_groups"])
     tokens = _name_tokens(param_name)
+    tokens_lower = set(tokens)
+    for token in ssm_groups:
+        token_lower = str(token).lower()
+        if token_lower == "d":
+            if "d" in tokens_lower and ("ssm" in name_lower or "mamba" in name_lower or "exfusion" in name_lower):
+                return True
+        elif token_lower in name_lower:
+            return True
+
     joined = "_".join(tokens)
     if "a_log" in joined or "dt_proj" in joined:
         return True
-    return bool(tokens) and tokens[-1] == "d"
+    return bool(tokens) and tokens[-1] == "d" and ("ssm" in name_lower or "mamba" in name_lower or "exfusion" in name_lower)
 
 
 def is_projection_param(
@@ -343,6 +349,7 @@ def apply_dare_preprocessing(
     ssm_drop_reduction: float = 0.5,
     policies: Optional[Mapping[str, Any]] = None,
     generator: Optional[torch.Generator] = None,
+    rescale_deltas: bool = False,
 ) -> Tuple[List[Dict[str, Tensor]], List[Dict[str, Tensor]]]:
     _validate_probability("dare_base_p", dare_base_p, inclusive_one=False)
     _validate_probability("ssm_drop_reduction", ssm_drop_reduction)
@@ -385,7 +392,7 @@ def apply_dare_preprocessing(
                 generator=generator,
             )
             keep = random_values >= drop_rate
-            scale = 1.0 / max(1.0 - drop_rate, 1e-8)
+            scale = (1.0 / max(1.0 - drop_rate, 1e-8)) if rescale_deltas else 1.0
             dropped[name] = delta * keep.to(delta.dtype) * scale
             masks[name] = keep
 
@@ -524,6 +531,12 @@ def _extract_logits(output: Any) -> Tensor:
 
 
 def _default_fisher_loss(output: Any, _: Any) -> Tensor:
+    """Diagnostic pseudo-loss fallback for empirical Fisher accumulation.
+
+    Note: This pseudo-loss is a diagnostic fallback. Production Fisher
+    diagonal estimation requires task-specific loss gradients (e.g. cross-entropy
+    against ground-truth labels) for valid parameter curvature estimates.
+    """
     logits = _extract_logits(output)
     if logits.numel() == 0:
         raise ValueError("Model output is empty")
@@ -1654,7 +1667,8 @@ class DAPHHybridDecoderLayer(nn.Module):
             window = self.attention_window
             sinks = self.config.attn_sink_tokens
             if window is not None and new_attn_state.shape[1] > window:
-                if 0 < sinks < window and new_attn_state.shape[1] > sinks:
+                total_pos = new_attn_state.shape[1]
+                if 0 < sinks < window and total_pos > sinks:
                     # Anchor the first `sinks` tokens (attention sinks,
                     # arXiv:2309.17453) and slide the remainder of the window.
                     new_attn_state = torch.cat(
@@ -1663,9 +1677,23 @@ class DAPHHybridDecoderLayer(nn.Module):
                     new_attn_padding_state = torch.cat(
                         [new_attn_padding_state[:, :sinks],
                          new_attn_padding_state[:, -(window - sinks):]], dim=1)
+                    sink_pos = torch.arange(sinks, device=hidden_states.device)
+                    sliding_pos = torch.arange(
+                        total_pos - (window - sinks), total_pos, device=hidden_states.device
+                    )
+                    meta["attn_position_ids"] = torch.cat(
+                        [sink_pos, sliding_pos], dim=0
+                    ).unsqueeze(0).expand(batch_size, -1)
                 else:
                     new_attn_state = new_attn_state[:, -window:, :]
                     new_attn_padding_state = new_attn_padding_state[:, -window:]
+                    meta["attn_position_ids"] = torch.arange(
+                        total_pos - window, total_pos, device=hidden_states.device
+                    ).unsqueeze(0).expand(batch_size, -1)
+            else:
+                meta["attn_position_ids"] = torch.arange(
+                    new_attn_state.shape[1], device=hidden_states.device
+                ).unsqueeze(0).expand(batch_size, -1)
             meta["attn_state"] = new_attn_state
             meta["attn_padding_state"] = new_attn_padding_state
 
@@ -2415,6 +2443,37 @@ def run_self_test() -> None:
     # 10.0; pure sign-majority elects - and averages the two agreeing experts.
     assert torch.allclose(majority_result["weight"], torch.tensor([-1.0]))
     print("19. TIES v2 pure sign-majority election (outlier cannot dominate) OK")
+
+    # 20. DARE preprocessing rescale_deltas option
+    task_vecs20 = [{"w": torch.ones(100)}]
+    proc_unscaled, _ = apply_dare_preprocessing(task_vecs20, dare_base_p=0.25, rescale_deltas=False)
+    proc_scaled, _ = apply_dare_preprocessing(task_vecs20, dare_base_p=0.25, rescale_deltas=True)
+    # Unscaled non-zero values stay 1.0; scaled non-zero values become ~1.33
+    nonzero_unscaled = proc_unscaled[0]["w"][proc_unscaled[0]["w"] != 0]
+    nonzero_scaled = proc_scaled[0]["w"][proc_scaled[0]["w"] != 0]
+    assert torch.allclose(nonzero_unscaled, torch.ones_like(nonzero_unscaled))
+    assert torch.allclose(nonzero_scaled, torch.full_like(nonzero_scaled, 1.0 / 0.75))
+    print("20. DARE rescaling option (unscaled default for normalized merges) OK")
+
+    # 21. Hardened SSM core parameter matcher
+    assert is_ssm_core_param("mamba.A_log")
+    assert is_ssm_core_param("ssm.D")
+    assert not is_ssm_core_param("mlp.down_proj.bias_d")
+    assert is_ssm_core_param("A_log", policies={"custom_key": True})
+    print("21. hardened SSM parameter matcher & policy fallback OK")
+
+    # 22. KV cache trimming attention sink position ID tracking
+    cfg22 = DAPHConfig(hidden_size=32, num_attention_heads=2, attn_window=4, attn_sink_tokens=1)
+    layer22 = DAPHHybridDecoderLayer(cfg22)
+    x22 = torch.randn(1, 1, 32)
+    mstate22 = None
+    astate22 = torch.randn(1, 5, 32)  # history length 5 > window 4
+    apadd22 = torch.zeros(1, 5, dtype=torch.bool)
+    _, meta22 = layer22(x22, use_cache=True, attn_state=astate22, attn_padding_state=apadd22)
+    # Total pos = 6 (5 history + 1 current); sink = 1, window = 4 -> pos ids = [0, 3, 4, 5]
+    assert "attn_position_ids" in meta22
+    assert meta22["attn_position_ids"].squeeze(0).tolist() == [0, 3, 4, 5]
+    print("22. attention sink position ID tracking OK")
 
     print("All DAPH ExFusion Hybrid v2.3 self-tests passed")
 
