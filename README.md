@@ -6,7 +6,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyTorch Version](https://img.shields.io/badge/pytorch-2.1%2B-ee4c2c.svg)](https://pytorch.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/tests-12%2F12%20passing-brightgreen.svg)](<>)
+[![Build Status](https://img.shields.io/badge/tests-14%2F14%20passing-brightgreen.svg)](<>)
 [![Architecture](https://img.shields.io/badge/architecture-5--Path%20NeSy--MoE-purple.svg)](daph_nesy_v1_0.py)
 
 ---

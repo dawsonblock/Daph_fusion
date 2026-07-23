@@ -30,6 +30,7 @@ License: Apache 2.0
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import os
 import sys
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
@@ -291,50 +292,62 @@ class TokenizerBoundRulesEngine:
 
 
 class SubwordSequenceBridge:
-    """Bridge for multi-token subword token sequences (BPE, SentencePiece, WordPiece).
-
-    Decodes multi-token subword spans into text strings, applies string-level
-    symbolic domain solvers (math, logic, SAT, AST), and re-encodes back to
-    discrete token ID tensors for STE re-embedding.
-    """
+    """Parallel Thread-Pooled Bridge for Multi-Token Subword Sequences."""
 
     def __init__(
         self,
         tokenizer: Any,
         string_solver: Callable[[str], str],
         max_length: Optional[int] = None,
+        num_workers: int = 4,
     ) -> None:
         self.tokenizer = tokenizer
         self.string_solver = string_solver
         self.max_length = max_length
+        self.num_workers = num_workers
+        self._pool: Optional[ThreadPoolExecutor] = None
+
+    def _get_pool(self) -> ThreadPoolExecutor:
+        if self._pool is None:
+            self._pool = ThreadPoolExecutor(max_workers=self.num_workers)
+        return self._pool
+
+    def _solve_single_sequence(self, row_ids: List[int], seq_len: int) -> List[int]:
+        try:
+            decoded_text = self.tokenizer.decode(row_ids, skip_special_tokens=True)
+            solved_text = self.string_solver(decoded_text)
+            re_encoded = self.tokenizer.encode(
+                solved_text, add_special_tokens=False
+            )
+        except Exception:
+            re_encoded = row_ids
+
+        # Truncate or pad to sequence length L
+        if len(re_encoded) > seq_len:
+            return re_encoded[:seq_len]
+        elif len(re_encoded) < seq_len:
+            pad_id = getattr(self.tokenizer, "pad_token_id", None)
+            if pad_id is None:
+                pad_id = getattr(self.tokenizer, "eos_token_id", 0)
+            if pad_id is None:
+                pad_id = 0
+            return re_encoded + [pad_id] * (seq_len - len(re_encoded))
+        return re_encoded
 
     def __call__(self, token_ids: Tensor) -> Tensor:
         device = token_ids.device
         batch_size, seq_len = token_ids.shape
-        solved_ids_list: List[List[int]] = []
+        token_rows = token_ids.tolist()
 
-        for b in range(batch_size):
-            row_ids = token_ids[b].tolist()
-            try:
-                decoded_text = self.tokenizer.decode(row_ids, skip_special_tokens=True)
-                solved_text = self.string_solver(decoded_text)
-                re_encoded = self.tokenizer.encode(
-                    solved_text, add_special_tokens=False
-                )
-            except Exception:
-                re_encoded = row_ids
-
-            # Truncate or pad to sequence length L
-            if len(re_encoded) > seq_len:
-                re_encoded = re_encoded[:seq_len]
-            elif len(re_encoded) < seq_len:
-                pad_id = getattr(self.tokenizer, "pad_token_id", None)
-                if pad_id is None:
-                    pad_id = getattr(self.tokenizer, "eos_token_id", 0)
-                if pad_id is None:
-                    pad_id = 0
-                re_encoded = re_encoded + [pad_id] * (seq_len - len(re_encoded))
-            solved_ids_list.append(re_encoded)
+        if batch_size > 1:
+            pool = self._get_pool()
+            futures = [
+                pool.submit(self._solve_single_sequence, token_rows[b], seq_len)
+                for b in range(batch_size)
+            ]
+            solved_ids_list = [f.result() for f in futures]
+        else:
+            solved_ids_list = [self._solve_single_sequence(token_rows[0], seq_len)]
 
         return torch.tensor(solved_ids_list, dtype=torch.long, device=device)
 
@@ -449,14 +462,18 @@ class VectorizedSymbolicExpert(nn.Module):
         domain: str = "digit_squaring",
         tokenizer: Optional[Any] = None,
         subword_bridge: Optional[SubwordSequenceBridge] = None,
+        tie_de_embed: bool = True,
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.de_embed = nn.Linear(hidden_size, vocab_size, bias=False)
-        with torch.no_grad():
-            self.de_embed.weight.copy_(lm_head_weight)
-        self.de_embed.weight.requires_grad_(False)
+        if tie_de_embed and isinstance(lm_head_weight, nn.Parameter):
+            self.de_embed.weight = lm_head_weight
+        else:
+            with torch.no_grad():
+                self.de_embed.weight.copy_(lm_head_weight)
+            self.de_embed.weight.requires_grad_(False)
         self.re_embed = nn.Embedding(vocab_size, hidden_size)
         with torch.no_grad():
             if token_embeddings_weight is not None:

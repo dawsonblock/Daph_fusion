@@ -2,6 +2,7 @@
 """Live test suite for DAPH NeSy-MoE v1.0 (requires torch + v2.3 base)."""
 
 import torch
+import torch.nn as nn
 
 from daph_hybrid_exfusion_v2_3 import DAPHConfig
 from daph_nesy_v1_0 import (
@@ -333,7 +334,9 @@ def test_12_nesy_model_container() -> None:
     )
     vocab, hidden = 128, 32
     lm_head = torch.randn(vocab, hidden, device=device)
-    expert = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="digit_squaring").to(device)
+    expert = VectorizedSymbolicExpert(
+        hidden, vocab, lm_head, domain="digit_squaring"
+    ).to(device)
 
     model = NeSyModel(cfg, num_layers=3, symbolic_expert=expert).to(device)
     x = torch.randn(2, 4, 32, device=device)
@@ -348,6 +351,37 @@ def test_12_nesy_model_container() -> None:
     out_cached, states_cached = model(x, token_ids=tok, use_cache=True)
     assert out_cached.shape == x.shape
     assert len(states_cached) == 3
+
+
+def test_13_sparse_hard_routing_dispatch() -> None:
+    """Verifies sparse hard routing output matches expected tensor dimensions."""
+    device = _get_device()
+    cfg = DAPHConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_attention_heads=2,
+        num_paths=5,
+        routing_granularity="token",
+        routing_mode="hard",
+    )
+    layer = NeSyDecoderLayer(cfg).to(device).eval()
+    x = torch.randn(2, 8, 32, device=device)
+
+    out, meta = layer(x)
+    assert out.shape == x.shape
+    assert "selected_paths" in meta
+
+
+def test_14_dynamic_lm_head_weight_tying() -> None:
+    """Verifies de_embed weight pointer shares memory directly with lm_head."""
+    hidden, vocab = 32, 128
+    lm_head_param = nn.Parameter(torch.randn(vocab, hidden))
+    expert = VectorizedSymbolicExpert(
+        hidden, vocab, lm_head_param, tie_de_embed=True
+    )
+
+    # Verify memory identity
+    assert expert.de_embed.weight is lm_head_param
 
 
 def main() -> None:
@@ -376,7 +410,11 @@ def main() -> None:
     print("11. layer-selective routing topology: OK")
     test_12_nesy_model_container()
     print("12. multi-layer NeSyModel container: OK")
-    print("\nAll 12 NeSy-MoE v1.1 Extended tests passed (executed live).")
+    test_13_sparse_hard_routing_dispatch()
+    print("13. sparse hard-routing dispatch execution: OK")
+    test_14_dynamic_lm_head_weight_tying()
+    print("14. dynamic LM head weight pointer tying: OK")
+    print("\nAll 14 NeSy-MoE v1.1 Extended tests passed (executed live).")
 
 
 if __name__ == "__main__":

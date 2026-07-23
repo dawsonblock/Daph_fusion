@@ -482,7 +482,7 @@ def difficulty_weighted_ties_merge(
             dim=0,
         )
         elected_sign = torch.sign(vote)
-        zero_ties = (elected_sign == 0)
+        zero_ties = elected_sign == 0
         if zero_ties.any():
             fallback_sign = torch.sign(trimmed[0])
             elected_sign = torch.where(zero_ties, fallback_sign, elected_sign)
@@ -878,19 +878,41 @@ def register_scan_backend(
 try:
     import mamba_ssm.ops.selective_scan_interface as mamba_ssm_ops
 
-    def _triton_scan_adapter(xin, b_matrix, c_matrix, dt, a_matrix, d_skip, h_init):
+    def _triton_scan_adapter(
+        xin: Tensor,
+        b_matrix: Tensor,
+        c_matrix: Tensor,
+        dt: Tensor,
+        a_matrix: Tensor,
+        d_skip: Tensor,
+        h_init: Tensor,
+    ) -> Tuple[Tensor, Tensor]:
+        u = xin.transpose(1, 2).contiguous()
+        delta = dt.transpose(1, 2).contiguous()
+        b = b_matrix.transpose(1, 2).contiguous()
+        c = c_matrix.transpose(1, 2).contiguous()
+
         out = mamba_ssm_ops.selective_scan_fn(
-            xin.transpose(1, 2),
-            dt.transpose(1, 2),
+            u,
+            delta,
             a_matrix,
-            b_matrix.transpose(1, 2),
-            c_matrix.transpose(1, 2),
+            b,
+            c,
             d_skip,
             z=None,
             delta_bias=None,
             delta_softplus=False,
+            return_last_state=True,
         )
-        return out.transpose(1, 2), h_init
+
+        if isinstance(out, tuple):
+            scan_out, last_state = out
+        else:
+            scan_out = out
+            last_state = h_init
+
+        y = scan_out.transpose(1, 2).contiguous()
+        return y, last_state
 
     register_scan_backend("triton", _triton_scan_adapter)
     if "DAPH_SCAN_BACKEND" not in os.environ:
@@ -1382,6 +1404,55 @@ class DAPHConfig:
                 raise ValueError(f"{name} must be positive when provided")
 
 
+class SparseSequenceDispatch(nn.Module):
+    """Sparse token gather/scatter wrapper for sequence-dependent paths."""
+
+    @staticmethod
+    def gather_active_tokens(
+        hidden_states: Tensor,
+        mask: Tensor,
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        """
+        Extracts active token hidden states and indices.
+        hidden_states: [B, L, H]
+        mask: [B, L] bool tensor where True indicates routed tokens
+        Returns:
+            sparse_tokens: [1, N_active, H]
+            b_idx, t_idx: 1D index tensors for scattering
+        """
+        b_idx, t_idx = torch.where(mask)
+        if b_idx.numel() == 0:
+            return (
+                torch.empty(
+                    1,
+                    0,
+                    hidden_states.shape[-1],
+                    device=hidden_states.device,
+                    dtype=hidden_states.dtype,
+                ),
+                b_idx,
+                t_idx,
+            )
+
+        sparse_tokens = hidden_states[b_idx, t_idx].unsqueeze(0)  # Shape: [1, N_active, H]
+        return sparse_tokens, b_idx, t_idx
+
+    @staticmethod
+    def scatter_active_tokens(
+        sparse_output: Tensor,
+        b_idx: Tensor,
+        t_idx: Tensor,
+        target_shape: Tuple[int, int, int],
+    ) -> Tensor:
+        """Scatters processed sparse tokens back to full sequence shape [B, L, H]."""
+        output = torch.zeros(
+            target_shape, device=sparse_output.device, dtype=sparse_output.dtype
+        )
+        if b_idx.numel() > 0:
+            output[b_idx, t_idx] = sparse_output.squeeze(0)
+        return output
+
+
 class DAPHHybridDecoderLayer(nn.Module):
     ATTENTION_PATH = 0
     MAMBA_PATH = 1
@@ -1571,13 +1642,33 @@ class DAPHHybridDecoderLayer(nn.Module):
             )
 
         if self.MAMBA_PATH in required or use_cache:
-            mamba_output, next_mamba_state = self.mamba_exfusion(
-                hidden_states,
-                difficulty_metrics,
-                state=mamba_state,
-                return_state=use_cache,
-                mask=mamba_mask,
-            )
+            if mamba_mask is not None and not mamba_mask.all() and not use_cache:
+                active_mask = mamba_mask.bool()
+                sparse_x, b_idx, t_idx = SparseSequenceDispatch.gather_active_tokens(
+                    hidden_states, active_mask
+                )
+                if b_idx.numel() > 0:
+                    sparse_out, next_mamba_state = self.mamba_exfusion(
+                        sparse_x,
+                        difficulty_metrics=None,
+                        state=mamba_state,
+                        return_state=use_cache,
+                        mask=None,
+                    )
+                    mamba_output = SparseSequenceDispatch.scatter_active_tokens(
+                        sparse_out, b_idx, t_idx, hidden_states.shape
+                    )
+                else:
+                    mamba_output = torch.zeros_like(hidden_states)
+                    next_mamba_state = None
+            else:
+                mamba_output, next_mamba_state = self.mamba_exfusion(
+                    hidden_states,
+                    difficulty_metrics,
+                    state=mamba_state,
+                    return_state=use_cache,
+                    mask=mamba_mask,
+                )
             if self.MAMBA_PATH in required:
                 outputs[self.MAMBA_PATH] = mamba_output
 
