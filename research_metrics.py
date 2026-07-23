@@ -1,6 +1,7 @@
 import math
 import random
 from typing import Dict, List, NamedTuple, Optional
+
 import numpy as np
 import torch
 
@@ -34,7 +35,7 @@ def calculate_retention(
             value=None,
             reason="expert_does_not_outperform_base",
         )
-    
+
     retention_val = (base_loss - merged_loss) / advantage
     return RetentionResult(
         valid=True,
@@ -48,20 +49,16 @@ def compute_pareto_metrics(
     merged_losses: Dict[str, float],
 ) -> Dict[str, float]:
     """Computes Pareto-style domain trade-off metrics."""
-    degradations = {
-        d: merged_losses[d] - base_losses[d] for d in base_losses
-    }
-    improvements = {
-        d: base_losses[d] - merged_losses[d] for d in base_losses
-    }
-    
+    degradations = {d: merged_losses[d] - base_losses[d] for d in base_losses}
+    improvements = {d: base_losses[d] - merged_losses[d] for d in base_losses}
+
     mean_degradation = float(np.mean(list(degradations.values())))
     worst_degradation = float(max(degradations.values()))
     improved_count = sum(1 for v in improvements.values() if v > 0)
     degraded_count = sum(1 for v in degradations.values() if v > 0)
     max_domain_gain = float(max(improvements.values()))
     max_domain_loss = float(max(degradations.values()))
-    
+
     return {
         "mean_degradation": mean_degradation,
         "worst_degradation": worst_degradation,

@@ -10,12 +10,12 @@ $$\boxed{\text{Freeze} \rightarrow \text{Correct} \rightarrow \text{Validate} \r
 
 ## Release Sequence & Status Matrix
 
-| Release | Version Focus | Key Deliverables & Scope | Status |
-| :--- | :--- | :--- | :--- |
-| **Release A** | `v2.3.1-correctness-hotfix` | Legacy artifact freeze (`Phase 0`), `MergeMode` math fixes (`Phase 1`), Retention metric guards (`Phase 2`), Regression suite (`test_v2_3_1_correctness.py`). | **COMPLETED / ACTIVE** |
-| **Release B** | `v2.4.0-research-validity` | Expert qualification pipeline (`Phase 3`), 4-layer dataset split (`Phase 4`), Multi-seed RNG runner (`Phase 5`), Validation $\lambda$ selection (`Phase 6`), Full merge ablations (`Phase 7`). | **PLANNED** |
-| **Release C** | `v2.5.0-runtime-validity` | Full/chunked/streaming SSM equivalence (`Phase 10`), Explicit path dispatch (`Phase 12`), Router calibration & oracle baselines (`Phase 13`), Benchmark harness rewrite (`Phase 20`). | **PLANNED** |
-| **Release D** | `v3.0.0-neurosymbolic` | Real AST/arithmetic/Boolean/SAT parsers (`Phases 15–17`), Tokenizer-safe bridge (`Phase 18`), Verified STE backward surrogates (`Phase 19`). | **PLANNED** |
+| Release       | Version Focus               | Key Deliverables & Scope                                                                                                                                                                       | Status                 |
+| :------------ | :-------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------- |
+| **Release A** | `v2.3.1-correctness-hotfix` | Legacy artifact freeze (`Phase 0`), `MergeMode` math fixes (`Phase 1`), Retention metric guards (`Phase 2`), Regression suite (`test_v2_3_1_correctness.py`).                                  | **COMPLETED / ACTIVE** |
+| **Release B** | `v2.4.0-research-validity`  | Expert qualification pipeline (`Phase 3`), 4-layer dataset split (`Phase 4`), Multi-seed RNG runner (`Phase 5`), Validation $\lambda$ selection (`Phase 6`), Full merge ablations (`Phase 7`). | **PLANNED**            |
+| **Release C** | `v2.5.0-runtime-validity`   | Full/chunked/streaming SSM equivalence (`Phase 10`), Explicit path dispatch (`Phase 12`), Router calibration & oracle baselines (`Phase 13`), Benchmark harness rewrite (`Phase 20`).          | **PLANNED**            |
+| **Release D** | `v3.0.0-neurosymbolic`      | Real AST/arithmetic/Boolean/SAT parsers (`Phases 15–17`), Tokenizer-safe bridge (`Phase 18`), Verified STE backward surrogates (`Phase 19`).                                                   | **PLANNED**            |
 
 ---
 

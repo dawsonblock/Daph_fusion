@@ -1,25 +1,29 @@
 import pytest
-from daph_hybrid_exfusion_v2_3 import MergeMode, merge_expert_family
-from research_metrics import calculate_retention, compute_expert_advantage
 import torch
 import torch.nn as nn
+
+from daph_hybrid_exfusion_v2_3 import MergeMode, merge_expert_family
+from research_metrics import calculate_retention, compute_expert_advantage
 
 
 def test_parameter_average_equals_mean():
     base = nn.Linear(4, 4, bias=False)
     e1 = nn.Linear(4, 4, bias=False)
     e2 = nn.Linear(4, 4, bias=False)
-    
+
     with torch.no_grad():
         base.weight.fill_(0.0)
         e1.weight.fill_(2.0)
         e2.weight.fill_(4.0)
-        
+
     experts = [e1, e2]
     weights = torch.tensor([1.0, 1.0])
-    
+
     res = merge_expert_family(
-        experts, base, weights, policies={"merge_mode": MergeMode.PARAMETER_AVERAGE.value}
+        experts,
+        base,
+        weights,
+        policies={"merge_mode": MergeMode.PARAMETER_AVERAGE.value},
     )
     assert torch.allclose(res["weight"], torch.full((4, 4), 3.0))
 
@@ -28,15 +32,15 @@ def test_task_arithmetic_equals_sum():
     base = nn.Linear(4, 4, bias=False)
     e1 = nn.Linear(4, 4, bias=False)
     e2 = nn.Linear(4, 4, bias=False)
-    
+
     with torch.no_grad():
         base.weight.fill_(0.0)
         e1.weight.fill_(2.0)
         e2.weight.fill_(4.0)
-        
+
     experts = [e1, e2]
     weights = torch.tensor([1.0, 1.0])
-    
+
     res = merge_expert_family(
         experts, base, weights, policies={"merge_mode": MergeMode.TASK_ARITHMETIC.value}
     )
@@ -47,17 +51,20 @@ def test_task_arithmetic_is_n_times_average():
     base = nn.Linear(4, 4, bias=False)
     e1 = nn.Linear(4, 4, bias=False)
     e2 = nn.Linear(4, 4, bias=False)
-    
+
     with torch.no_grad():
         base.weight.fill_(0.0)
         e1.weight.fill_(1.5)
         e2.weight.fill_(2.5)
-        
+
     experts = [e1, e2]
     weights = torch.tensor([1.0, 1.0])
-    
+
     avg_res = merge_expert_family(
-        experts, base, weights, policies={"merge_mode": MergeMode.PARAMETER_AVERAGE.value}
+        experts,
+        base,
+        weights,
+        policies={"merge_mode": MergeMode.PARAMETER_AVERAGE.value},
     )
     ta_res = merge_expert_family(
         experts, base, weights, policies={"merge_mode": MergeMode.TASK_ARITHMETIC.value}

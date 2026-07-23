@@ -99,13 +99,13 @@
     {
       "scale": 0.1,
       "method": "DARE + TIES",
-      "email_nll": 9.8356,
-      "R_email": -0.15,
-      "art_nll": 9.3045,
-      "R_art": 7.0,
-      "psychology_nll": 8.2503,
-      "R_psychology": -4.61,
-      "R_bar": 0.75
+      "email_nll": 9.8145,
+      "R_email": -0.17,
+      "art_nll": 9.2517,
+      "R_art": 7.96,
+      "psychology_nll": 8.2442,
+      "R_psychology": -4.81,
+      "R_bar": 0.99
     },
     {
       "scale": 0.1,
@@ -121,13 +121,13 @@
     {
       "scale": 0.1,
       "method": "Full ExFusion",
-      "email_nll": 10.0014,
-      "R_email": 0.03,
-      "art_nll": 9.5056,
-      "R_art": 3.36,
-      "psychology_nll": 8.4228,
-      "R_psychology": 1.12,
-      "R_bar": 1.5
+      "email_nll": 9.99,
+      "R_email": 0.02,
+      "art_nll": 9.4917,
+      "R_art": 3.61,
+      "psychology_nll": 8.3561,
+      "R_psychology": -1.1,
+      "R_bar": 0.84
     },
     {
       "scale": 0.2,
@@ -165,13 +165,13 @@
     {
       "scale": 0.2,
       "method": "DARE + TIES",
-      "email_nll": 9.7157,
-      "R_email": -0.28,
-      "art_nll": 8.8775,
-      "R_art": 14.74,
-      "psychology_nll": 8.1474,
-      "R_psychology": -8.02,
-      "R_bar": 2.15
+      "email_nll": 9.754,
+      "R_email": -0.24,
+      "art_nll": 8.8578,
+      "R_art": 15.09,
+      "psychology_nll": 8.1964,
+      "R_psychology": -6.4,
+      "R_bar": 2.82
     },
     {
       "scale": 0.2,
@@ -187,13 +187,13 @@
     {
       "scale": 0.2,
       "method": "Full ExFusion",
-      "email_nll": 9.9623,
-      "R_email": -0.01,
-      "art_nll": 9.2884,
-      "R_art": 7.29,
-      "psychology_nll": 8.3953,
-      "R_psychology": 0.2,
-      "R_bar": 2.49
+      "email_nll": 10.0584,
+      "R_email": 0.09,
+      "art_nll": 9.413,
+      "R_art": 5.03,
+      "psychology_nll": 8.4604,
+      "R_psychology": 2.36,
+      "R_bar": 2.5
     },
     {
       "scale": 0.25,
@@ -231,13 +231,13 @@
     {
       "scale": 0.25,
       "method": "DARE + TIES",
-      "email_nll": 9.5859,
-      "R_email": -0.42,
-      "art_nll": 8.4773,
-      "R_art": 21.99,
-      "psychology_nll": 8.0042,
-      "R_psychology": -12.77,
-      "R_bar": 2.93
+      "email_nll": 9.621,
+      "R_email": -0.38,
+      "art_nll": 8.6308,
+      "R_art": 19.21,
+      "psychology_nll": 8.0811,
+      "R_psychology": -10.22,
+      "R_bar": 2.87
     },
     {
       "scale": 0.25,
@@ -253,13 +253,13 @@
     {
       "scale": 0.25,
       "method": "Full ExFusion",
-      "email_nll": 9.9669,
-      "R_email": -0.01,
-      "art_nll": 9.088,
-      "R_art": 10.92,
-      "psychology_nll": 8.3979,
-      "R_psychology": 0.29,
-      "R_bar": 3.73
+      "email_nll": 10.1843,
+      "R_email": 0.22,
+      "art_nll": 9.3292,
+      "R_art": 6.55,
+      "psychology_nll": 8.5525,
+      "R_psychology": 5.42,
+      "R_bar": 4.07
     },
     {
       "scale": 0.3,
@@ -297,13 +297,13 @@
     {
       "scale": 0.3,
       "method": "DARE + TIES",
-      "email_nll": 9.4641,
-      "R_email": -0.55,
-      "art_nll": 8.2019,
-      "R_art": 26.97,
-      "psychology_nll": 7.8404,
-      "R_psychology": -18.21,
-      "R_bar": 2.74
+      "email_nll": 9.623,
+      "R_email": -0.38,
+      "art_nll": 8.4235,
+      "R_art": 22.96,
+      "psychology_nll": 8.0495,
+      "R_psychology": -11.27,
+      "R_bar": 3.77
     },
     {
       "scale": 0.3,
@@ -319,13 +319,13 @@
     {
       "scale": 0.3,
       "method": "Full ExFusion",
-      "email_nll": 9.993,
-      "R_email": 0.02,
-      "art_nll": 9.0481,
-      "R_art": 11.64,
-      "psychology_nll": 8.4396,
-      "R_psychology": 1.67,
-      "R_bar": 4.45
+      "email_nll": 10.0678,
+      "R_email": 0.1,
+      "art_nll": 8.9709,
+      "R_art": 13.04,
+      "psychology_nll": 8.3269,
+      "R_psychology": -2.07,
+      "R_bar": 3.69
     },
     {
       "scale": 0.35,
@@ -363,13 +363,13 @@
     {
       "scale": 0.35,
       "method": "DARE + TIES",
-      "email_nll": 9.3528,
-      "R_email": -0.67,
-      "art_nll": 8.0244,
-      "R_art": 30.19,
-      "psychology_nll": 7.8146,
-      "R_psychology": -19.06,
-      "R_bar": 3.49
+      "email_nll": 9.2508,
+      "R_email": -0.78,
+      "art_nll": 7.8528,
+      "R_art": 33.3,
+      "psychology_nll": 7.7495,
+      "R_psychology": -21.22,
+      "R_bar": 3.77
     },
     {
       "scale": 0.35,
@@ -378,20 +378,20 @@
       "R_email": -0.23,
       "art_nll": 6.8959,
       "R_art": 50.63,
-      "psychology_nll": 7.9495,
+      "psychology_nll": 7.9496,
       "R_psychology": -14.59,
       "R_bar": 11.94
     },
     {
       "scale": 0.35,
       "method": "Full ExFusion",
-      "email_nll": 10.0757,
-      "R_email": 0.11,
-      "art_nll": 9.1442,
-      "R_art": 9.9,
-      "psychology_nll": 8.528,
-      "R_psychology": 4.6,
-      "R_bar": 4.87
+      "email_nll": 10.144,
+      "R_email": 0.18,
+      "art_nll": 9.0064,
+      "R_art": 12.4,
+      "psychology_nll": 8.5044,
+      "R_psychology": 3.82,
+      "R_bar": 5.47
     },
     {
       "scale": 0.4,
@@ -429,13 +429,13 @@
     {
       "scale": 0.4,
       "method": "DARE + TIES",
-      "email_nll": 9.3679,
-      "R_email": -0.65,
-      "art_nll": 7.5325,
-      "R_art": 39.1,
-      "psychology_nll": 7.7612,
-      "R_psychology": -20.84,
-      "R_bar": 5.87
+      "email_nll": 9.3295,
+      "R_email": -0.69,
+      "art_nll": 7.8937,
+      "R_art": 32.56,
+      "psychology_nll": 7.7639,
+      "R_psychology": -20.74,
+      "R_bar": 3.71
     },
     {
       "scale": 0.4,
@@ -451,13 +451,13 @@
     {
       "scale": 0.4,
       "method": "Full ExFusion",
-      "email_nll": 9.7997,
-      "R_email": -0.19,
-      "art_nll": 8.8206,
-      "R_art": 15.77,
-      "psychology_nll": 8.259,
-      "R_psychology": -4.32,
-      "R_bar": 3.75
+      "email_nll": 10.1369,
+      "R_email": 0.17,
+      "art_nll": 9.0007,
+      "R_art": 12.5,
+      "psychology_nll": 8.4863,
+      "R_psychology": 3.22,
+      "R_bar": 5.3
     },
     {
       "scale": 0.5,
@@ -495,35 +495,35 @@
     {
       "scale": 0.5,
       "method": "DARE + TIES",
-      "email_nll": 9.0317,
-      "R_email": -1.01,
-      "art_nll": 6.9204,
-      "R_art": 50.19,
-      "psychology_nll": 7.4282,
-      "R_psychology": -31.88,
-      "R_bar": 5.77
+      "email_nll": 9.1073,
+      "R_email": -0.93,
+      "art_nll": 6.6922,
+      "R_art": 54.32,
+      "psychology_nll": 7.4542,
+      "R_psychology": -31.02,
+      "R_bar": 7.46
     },
     {
       "scale": 0.5,
       "method": "Fisher-only",
-      "email_nll": 9.5464,
+      "email_nll": 9.5465,
       "R_email": -0.46,
       "art_nll": 5.7897,
       "R_art": 70.68,
-      "psychology_nll": 7.9755,
+      "psychology_nll": 7.9756,
       "R_psychology": -13.72,
       "R_bar": 18.83
     },
     {
       "scale": 0.5,
       "method": "Full ExFusion",
-      "email_nll": 10.0412,
-      "R_email": 0.07,
-      "art_nll": 8.6646,
-      "R_art": 18.59,
-      "psychology_nll": 8.3206,
-      "R_psychology": -2.27,
-      "R_bar": 5.46
+      "email_nll": 10.1094,
+      "R_email": 0.14,
+      "art_nll": 8.6986,
+      "R_art": 17.98,
+      "psychology_nll": 8.3603,
+      "R_psychology": -0.96,
+      "R_bar": 5.72
     },
     {
       "scale": 0.7,
@@ -561,13 +561,13 @@
     {
       "scale": 0.7,
       "method": "DARE + TIES",
-      "email_nll": 8.7355,
-      "R_email": -1.33,
-      "art_nll": 6.0416,
-      "R_art": 66.11,
-      "psychology_nll": 7.7371,
-      "R_psychology": -21.63,
-      "R_bar": 14.38
+      "email_nll": 8.5749,
+      "R_email": -1.5,
+      "art_nll": 5.731,
+      "R_art": 71.74,
+      "psychology_nll": 7.7023,
+      "R_psychology": -22.79,
+      "R_bar": 15.82
     },
     {
       "scale": 0.7,
@@ -583,13 +583,13 @@
     {
       "scale": 0.7,
       "method": "Full ExFusion",
-      "email_nll": 10.1851,
-      "R_email": 0.23,
-      "art_nll": 8.081,
-      "R_art": 29.17,
-      "psychology_nll": 8.593,
-      "R_psychology": 6.76,
-      "R_bar": 12.05
+      "email_nll": 10.1342,
+      "R_email": 0.17,
+      "art_nll": 8.7169,
+      "R_art": 17.65,
+      "psychology_nll": 8.7274,
+      "R_psychology": 11.22,
+      "R_bar": 9.68
     },
     {
       "scale": 1.0,
@@ -627,13 +627,13 @@
     {
       "scale": 1.0,
       "method": "DARE + TIES",
-      "email_nll": 9.8817,
-      "R_email": -0.1,
-      "art_nll": 5.4203,
-      "R_art": 77.37,
-      "psychology_nll": 9.0661,
-      "R_psychology": 22.46,
-      "R_bar": 33.24
+      "email_nll": 9.6296,
+      "R_email": -0.37,
+      "art_nll": 5.6443,
+      "R_art": 73.31,
+      "psychology_nll": 8.704,
+      "R_psychology": 10.44,
+      "R_bar": 27.79
     },
     {
       "scale": 1.0,
@@ -649,13 +649,24 @@
     {
       "scale": 1.0,
       "method": "Full ExFusion",
-      "email_nll": 10.0912,
-      "R_email": 0.12,
-      "art_nll": 7.1982,
-      "R_art": 45.16,
-      "psychology_nll": 8.8559,
-      "R_psychology": 15.48,
-      "R_bar": 20.26
+      "email_nll": 10.1407,
+      "R_email": 0.18,
+      "art_nll": 7.8691,
+      "R_art": 33.01,
+      "psychology_nll": 9.3332,
+      "R_psychology": 31.32,
+      "R_bar": 21.5
+    }
+  ]
+}.0,
+      "method": "Full ExFusion",
+      "email_nll": 11.2327,
+      "R_email": -2181.78,
+      "art_nll": 6.7033,
+      "R_art": -40.65,
+      "psychology_nll": 11.1779,
+      "R_psychology": 79.33,
+      "R_bar": -714.37
     }
   ]
 }
