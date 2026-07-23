@@ -345,6 +345,7 @@ All NeSy-MoE v1.0 (v1.1 Extended) tests passed (executed live).
 ├── daph_hybrid_exfusion_v2_3.py # Base DAPH Mamba/Attention Hybrid & Model Merging
 ├── test_nesy_v1_0.py          # Live test suite (7 comprehensive test groups)
 ├── run_model.py               # Pretrained Hugging Face model runner & NeSy pipeline
+├── ISSUES.md                  # Issues tracking & architectural roadmap
 ├── README.md                  # Detailed architecture & API documentation
 ├── LICENSE                    # MIT License
 └── .gitignore                 # Python & PyTorch cache ignores
