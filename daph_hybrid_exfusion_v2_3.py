@@ -1434,7 +1434,9 @@ class SparseSequenceDispatch(nn.Module):
                 t_idx,
             )
 
-        sparse_tokens = hidden_states[b_idx, t_idx].unsqueeze(0)  # Shape: [1, N_active, H]
+        sparse_tokens = hidden_states[b_idx, t_idx].unsqueeze(
+            0
+        )  # Shape: [1, N_active, H]
         return sparse_tokens, b_idx, t_idx
 
     @staticmethod

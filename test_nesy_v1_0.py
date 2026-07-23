@@ -376,9 +376,7 @@ def test_14_dynamic_lm_head_weight_tying() -> None:
     """Verifies de_embed weight pointer shares memory directly with lm_head."""
     hidden, vocab = 32, 128
     lm_head_param = nn.Parameter(torch.randn(vocab, hidden))
-    expert = VectorizedSymbolicExpert(
-        hidden, vocab, lm_head_param, tie_de_embed=True
-    )
+    expert = VectorizedSymbolicExpert(hidden, vocab, lm_head_param, tie_de_embed=True)
 
     # Verify memory identity
     assert expert.de_embed.weight is lm_head_param

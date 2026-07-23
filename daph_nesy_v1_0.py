@@ -30,9 +30,9 @@ License: Apache 2.0
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
@@ -316,9 +316,7 @@ class SubwordSequenceBridge:
         try:
             decoded_text = self.tokenizer.decode(row_ids, skip_special_tokens=True)
             solved_text = self.string_solver(decoded_text)
-            re_encoded = self.tokenizer.encode(
-                solved_text, add_special_tokens=False
-            )
+            re_encoded = self.tokenizer.encode(solved_text, add_special_tokens=False)
         except Exception:
             re_encoded = row_ids
 

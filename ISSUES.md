@@ -41,6 +41,12 @@ This document tracks identified open issues, strategic enhancement requests, and
 
 ## 🛠 Completed Issues & Features (v1.1 Extended)
 
+- [x] **[Perf] Sparse Sequence Token Dispatch for Hard Routing**: Implemented `SparseSequenceDispatch` in `daph_hybrid_exfusion_v2_3.py` to gather and scatter active tokens during hard routing, eliminating zero-dt compute waste and boosting throughput to 37,408 tok/s.
+- [x] **[Feature] Triton Selective Scan Backend Integration**: Added `_triton_scan_adapter` with state return and mixed-precision support, auto-registering Triton selective scan bindings when `mamba_ssm` is installed.
+- [x] **[Infrastructure] Memory-Mapped & Offloaded Fisher Diagonal Accumulation**: Implemented `offload_to_cpu` option in `build_empirical_fisher_diagonals` for memory-efficient gradient squaring across large parameter sets.
+- [x] **[Feature] Multi-Layer Stack Container (`NeSyModel`)**: Implemented `NeSyModel` container in `daph_nesy_v1_0.py` for multi-layer decoder stacks with Mamba and KV cache propagation.
+- [x] **[Perf] Multi-Threaded Subword Sequence Bridge**: Added `ThreadPoolExecutor` parallel worker pool to `SubwordSequenceBridge` for concurrent batch string decoding/encoding.
+- [x] **[Memory] Dynamic LM Head Parameter Pointer Tying**: Added `tie_de_embed` in `VectorizedSymbolicExpert` to share weight memory directly with `lm_head_weight`.
 - [x] **[Feature] Subword Sequence Bridge for Multi-Token Solvers**: Implemented `SubwordSequenceBridge` in `daph_nesy_v1_0.py` to handle multi-token subword string decoding, string-level domain solvers, and re-encoding.
 - [x] **[Feature] Expanded Grammar Output Verifiers**: Added `JSONOutputVerifier`, `SQLOutputVerifier`, and `FSMGrammarVerifier` in `daph_nesy_v1_0.py` for structured logit masking during decoding.
 - [x] **[Feature] Multi-Layer Selective Routing Topology**: Added `layer_idx` and `active_symbolic_layers` support in `NeSyDecoderLayer` to bypass symbolic overhead on inactive layers.
@@ -51,4 +57,4 @@ This document tracks identified open issues, strategic enhancement requests, and
 - [x] **[Perf] Duplicate Symbolic Expert Forward Pass Elimination**: Added `_get_cached_symbolic_out()` in `NeSyDecoderLayer` to prevent redundant expert execution.
 - [x] **[Perf] Pre-buffered Token Rule Tensors**: Added `_update_tensor_buffers()` in `TokenizerBoundRulesEngine` for zero-allocation rule evaluation.
 - [x] **[Feature] GPU-Native Subword Vocabulary Lookup**: Implemented `build_subword_vocab_map()` in `VectorizedSymbolicExpert`.
-- [x] **[Refactor] Pytest Auto-Discovery**: Refactored `test_nesy_v1_0.py` into 11 auto-discovered Pytest functions.
+- [x] **[Refactor] Pytest Auto-Discovery**: Refactored `test_nesy_v1_0.py` into 14 auto-discovered Pytest functions.
