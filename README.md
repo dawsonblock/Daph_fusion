@@ -364,6 +364,7 @@ All NeSy-MoE v1.0 (v1.1 Extended) tests passed (executed live).
 ├── benchmark_nesy.py          # Automated performance & VRAM profiling suite
 ├── run_model.py               # Pretrained Hugging Face model runner & NeSy pipeline
 ├── run_model_merge.py         # Multi-expert Hugging Face model merging runner
+├── RESULTS.md                 # Official live test, benchmark & merging results
 ├── ISSUES.md                  # Issues tracking & architectural roadmap
 ├── README.md                  # Detailed architecture & API documentation
 ├── LICENSE                    # MIT License
