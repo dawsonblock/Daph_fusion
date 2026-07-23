@@ -1,0 +1,6 @@
+{
+  "python_version": "3.12.0 (main, Apr 26 2026, 15:36:24) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "pytorch_version": "2.10.0",
+  "platform": "macOS-26.2-arm64-arm-64bit",
+  "device": "cpu"
+}

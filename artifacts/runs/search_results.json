@@ -1,0 +1,13 @@
+{
+  "mode": "layerwise",
+  "split": "validation",
+  "selected_candidate": {
+    "operator": "layer_normalized_arithmetic",
+    "lambdas": [
+      0.15,
+      0.25,
+      0.18
+    ]
+  },
+  "pareto_front_size": 3
+}

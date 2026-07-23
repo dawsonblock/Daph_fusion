@@ -1,9 +1,11 @@
 import math
 import random
-from typing import Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 class RetentionResult(NamedTuple):
@@ -39,9 +41,87 @@ def calculate_retention(
     retention_val = (base_loss - merged_loss) / advantage
     return RetentionResult(
         valid=True,
-        value=retention_val,
+        value=float(retention_val),
         reason=None,
     )
+
+
+def compute_domain_metrics(
+    base_loss: float,
+    expert_loss: float,
+    merged_loss: float,
+) -> Dict[str, Any]:
+    abs_gain = base_loss - merged_loss
+    rel_base_gain = (base_loss - merged_loss) / base_loss if base_loss > 0 else 0.0
+    retention = calculate_retention(base_loss, expert_loss, merged_loss)
+    regression = max(0.0, merged_loss - base_loss)
+    ppl = math.exp(merged_loss) if merged_loss < 20 else float("inf")
+
+    return {
+        "absolute_gain": abs_gain,
+        "relative_base_gain": rel_base_gain,
+        "retention_valid": retention.valid,
+        "retention_value": retention.value,
+        "retention_reason": retention.reason,
+        "regression": regression,
+        "nll": merged_loss,
+        "ppl": ppl,
+    }
+
+
+def compute_domain_nll(
+    model: nn.Module,
+    tokenizer: Any,
+    texts: List[str],
+    device: str = "cpu",
+    batch_size: int = 16,
+    max_length: int = 128,
+) -> Tuple[float, float]:
+    model.eval()
+    model.to(device)
+
+    total_nll = 0.0
+    total_tokens = 0
+
+    for i in range(0, len(texts), batch_size):
+        batch_texts = texts[i : i + batch_size]
+        encoded = tokenizer(
+            batch_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=max_length,
+        )
+        input_ids = encoded["input_ids"].to(device)
+        attention_mask = encoded["attention_mask"].to(device)
+
+        labels = input_ids.clone()
+        labels[attention_mask == 0] = -100
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask)
+            logits = outputs.logits
+
+            shift_logits = logits[:, :-1, :].contiguous()
+            shift_labels = labels[:, 1:].contiguous()
+
+            loss = F.cross_entropy(
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1),
+                ignore_index=-100,
+                reduction="sum",
+            )
+
+            num_tokens = (shift_labels != -100).sum().item()
+            total_nll += loss.item()
+            total_tokens += num_tokens
+
+    if total_tokens == 0:
+        return 0.0, float("inf")
+
+    mean_nll = total_nll / total_tokens
+    ppl = math.exp(mean_nll) if mean_nll < 20 else float("inf")
+    return mean_nll, ppl
 
 
 def compute_pareto_metrics(
