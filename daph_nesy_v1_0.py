@@ -301,7 +301,11 @@ class SubwordSequenceBridge:
             if len(re_encoded) > seq_len:
                 re_encoded = re_encoded[:seq_len]
             elif len(re_encoded) < seq_len:
-                pad_id = getattr(self.tokenizer, "pad_token_id", 0) or 0
+                pad_id = getattr(self.tokenizer, "pad_token_id", None)
+                if pad_id is None:
+                    pad_id = getattr(self.tokenizer, "eos_token_id", 0)
+                if pad_id is None:
+                    pad_id = 0
                 re_encoded = re_encoded + [pad_id] * (seq_len - len(re_encoded))
             solved_ids_list.append(re_encoded)
 
@@ -457,7 +461,8 @@ class VectorizedSymbolicExpert(nn.Module):
     def build_subword_vocab_map(self, tokenizer: Any) -> Tensor:
         """Precomputes a GPU-native lookup table mapping subword vocabulary
         token IDs to their solver-transformed target token IDs."""
-        mapping = torch.arange(self.vocab_size, dtype=torch.long)
+        device = self.de_embed.weight.device
+        mapping = torch.arange(self.vocab_size, dtype=torch.long, device=device)
         solved_mapping = self._solver(mapping)
         self.register_buffer("vocab_map", solved_mapping, persistent=True)
         return solved_mapping
@@ -766,12 +771,13 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
                 if (selected == self.SYMBOLIC_PATH).any():
                     sym_mask = selected == self.SYMBOLIC_PATH
                     sym_out = self._get_cached_symbolic_out(hidden_states)
+                    sym_out_normed = self.final_norm(sym_out)
                     if sym_mask.dim() == 1:
-                        output[sym_mask] = sym_out[sym_mask]
+                        output[sym_mask] = sym_out_normed[sym_mask]
                     else:
                         output = torch.where(
                             sym_mask.unsqueeze(-1),
-                            sym_out,
+                            sym_out_normed,
                             output,
                         )
 

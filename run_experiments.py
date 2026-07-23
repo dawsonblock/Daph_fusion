@@ -26,11 +26,12 @@ import json
 import math
 import os
 import sys
+from typing import Any, Dict, List, Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, List, Tuple, Any
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Ensure local workspace is in path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -44,113 +45,151 @@ from daph_hybrid_exfusion_v2_3 import (
 # 1. DOMAIN DATASET PREPARATION (CALIBRATION vs. HELD-OUT EVALUATION)
 # =============================================================================
 
+
 def build_datasets() -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
     """Builds calibration and held-out evaluation corpora (150 samples/domain each)."""
-    
-    # 1. Email / Business Domain
-    email_calib = [
-        f"Dear Team, I am writing to share an update regarding Q{q} milestone deliverables for project {p}."
-        for q in (1, 2, 3, 4) for p in ("Alpha", "Beta", "Gamma", "Delta", "Epsilon")
-    ] + [
-        f"Please find attached the revised Master Agreement draft for review by the legal and finance department {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Thank you for attending yesterday's strategy alignment session. Below is a summary of action items for team {t}."
-        for t in range(1, 31)
-    ] + [
-        f"We are pleased to confirm that the budget allocation for proposal {b} has been officially approved."
-        for b in range(1, 31)
-    ] + [
-        f"Kindly confirm your availability for the upcoming quarterly operations review scheduled for Tuesday slot {s}."
-        for s in range(1, 41)
-    ]
 
-    email_eval = [
-        f"Dear Colleague, regarding the upcoming project milestone {m}, please review the attached schedule and report back."
-        for m in range(1, 31)
-    ] + [
-        f"I am following up on our previous discussion about service contract renewal {c}. Here are the updated terms."
-        for c in range(1, 31)
-    ] + [
-        f"The executive committee has finalized the quarterly goals for department {d}. Please share with your team."
-        for d in range(1, 31)
-    ] + [
-        f"Please submit your team's feedback regarding vendor evaluation report {v} by the end of the day."
-        for v in range(1, 31)
-    ] + [
-        f"We invite all project leads to attend the risk management workshop scheduled for room {r} tomorrow."
-        for r in range(1, 31)
-    ]
+    # 1. Email / Business Domain
+    email_calib = (
+        [
+            f"Dear Team, I am writing to share an update regarding Q{q} milestone deliverables for project {p}."
+            for q in (1, 2, 3, 4)
+            for p in ("Alpha", "Beta", "Gamma", "Delta", "Epsilon")
+        ]
+        + [
+            f"Please find attached the revised Master Agreement draft for review by the legal and finance department {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Thank you for attending yesterday's strategy alignment session. Below is a summary of action items for team {t}."
+            for t in range(1, 31)
+        ]
+        + [
+            f"We are pleased to confirm that the budget allocation for proposal {b} has been officially approved."
+            for b in range(1, 31)
+        ]
+        + [
+            f"Kindly confirm your availability for the upcoming quarterly operations review scheduled for Tuesday slot {s}."
+            for s in range(1, 41)
+        ]
+    )
+
+    email_eval = (
+        [
+            f"Dear Colleague, regarding the upcoming project milestone {m}, please review the attached schedule and report back."
+            for m in range(1, 31)
+        ]
+        + [
+            f"I am following up on our previous discussion about service contract renewal {c}. Here are the updated terms."
+            for c in range(1, 31)
+        ]
+        + [
+            f"The executive committee has finalized the quarterly goals for department {d}. Please share with your team."
+            for d in range(1, 31)
+        ]
+        + [
+            f"Please submit your team's feedback regarding vendor evaluation report {v} by the end of the day."
+            for v in range(1, 31)
+        ]
+        + [
+            f"We invite all project leads to attend the risk management workshop scheduled for room {r} tomorrow."
+            for r in range(1, 31)
+        ]
+    )
 
     # 2. Art / Stable Diffusion Prompt Domain
-    art_calib = [
-        f"A highly detailed digital painting of a futuristic cyber city with glowing neon lights, style by artstation {i}, 8k, uhd."
-        for i in range(1, 31)
-    ] + [
-        f"An epic portrait of a mystical wizard in a ancient library, dramatic lighting, concept art, Unreal Engine 5 render {i}."
-        for i in range(1, 31)
-    ] + [
-        f"A breathtaking landscape of floating islands above a sea of clouds, trending on artstation, masterpiece quality {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Hyperrealistic oil painting of a serene mountain lake at sunset, sharp focus, vibrant colors, photorealistic detail {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Intricate 3D render of a mechanical dragon with brass gears and glowing crystal eyes, studio lighting, octane render {i}."
-        for i in range(1, 31)
-    ]
+    art_calib = (
+        [
+            f"A highly detailed digital painting of a futuristic cyber city with glowing neon lights, style by artstation {i}, 8k, uhd."
+            for i in range(1, 31)
+        ]
+        + [
+            f"An epic portrait of a mystical wizard in a ancient library, dramatic lighting, concept art, Unreal Engine 5 render {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"A breathtaking landscape of floating islands above a sea of clouds, trending on artstation, masterpiece quality {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Hyperrealistic oil painting of a serene mountain lake at sunset, sharp focus, vibrant colors, photorealistic detail {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Intricate 3D render of a mechanical dragon with brass gears and glowing crystal eyes, studio lighting, octane render {i}."
+            for i in range(1, 31)
+        ]
+    )
 
-    art_eval = [
-        f"A majestic fantasy castle perched on a snow-covered cliff, dramatic volumetric lighting, cinematic concept art {i}, 8k."
-        for i in range(1, 31)
-    ] + [
-        f"Detailed watercolor illustration of an enchanted forest with bioluminescent mushrooms and spirits, artstation {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Stylized character design of an astronaut exploring an alien crystal cavern, ray tracing, sharp focus {i}, 4k."
-        for i in range(1, 31)
-    ] + [
-        f"Atmospheric cyberpunk street scene in the rain with neon reflections on wet pavement, photorealistic {i}, uhd."
-        for i in range(1, 31)
-    ] + [
-        f"Surreal oil portrait of a goddess draped in starlight and cosmic nebula dust, intricate golden details {i}."
-        for i in range(1, 31)
-    ]
+    art_eval = (
+        [
+            f"A majestic fantasy castle perched on a snow-covered cliff, dramatic volumetric lighting, cinematic concept art {i}, 8k."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Detailed watercolor illustration of an enchanted forest with bioluminescent mushrooms and spirits, artstation {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Stylized character design of an astronaut exploring an alien crystal cavern, ray tracing, sharp focus {i}, 4k."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Atmospheric cyberpunk street scene in the rain with neon reflections on wet pavement, photorealistic {i}, uhd."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Surreal oil portrait of a goddess draped in starlight and cosmic nebula dust, intricate golden details {i}."
+            for i in range(1, 31)
+        ]
+    )
 
     # 3. Psychology / Dialogue Domain
-    psych_calib = [
-        f"In psychological terms, emotional resilience is defined as the individual's capacity to adapt to stress factor {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Cognitive behavioral therapy focuses on identifying maladaptive thought patterns and cognitive distortion {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Self-actualization in humanistic psychology refers to the realization of an individual's full human potential {i}."
-        for i in range(1, 31)
-    ] + [
-        f"The psychological concept of neuroplasticity demonstrates the brain's ability to reorganize neural pathways {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Empathy and active listening are fundamental components of building therapeutic rapport in clinical setting {i}."
-        for i in range(1, 31)
-    ]
+    psych_calib = (
+        [
+            f"In psychological terms, emotional resilience is defined as the individual's capacity to adapt to stress factor {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Cognitive behavioral therapy focuses on identifying maladaptive thought patterns and cognitive distortion {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Self-actualization in humanistic psychology refers to the realization of an individual's full human potential {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"The psychological concept of neuroplasticity demonstrates the brain's ability to reorganize neural pathways {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Empathy and active listening are fundamental components of building therapeutic rapport in clinical setting {i}."
+            for i in range(1, 31)
+        ]
+    )
 
-    psych_eval = [
-        f"Psychological research indicates that intrinsic motivation plays a crucial role in long-term skill acquisition {i}."
-        for i in range(1, 31)
-    ] + [
-        f"The term emotional intelligence encompasses self-awareness, self-regulation, motivation, and social awareness {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Attachment theory describes the dynamics of long-term interpersonal relationships between humans in context {i}."
-        for i in range(1, 31)
-    ] + [
-        f"Mindfulness-based interventions have demonstrated efficacy in reducing symptoms of anxiety and depression {i}."
-        for i in range(1, 31)
-    ] + [
-        f"In social psychology, cognitive dissonance describes the mental discomfort experienced when holding conflicting beliefs {i}."
-        for i in range(1, 31)
-    ]
+    psych_eval = (
+        [
+            f"Psychological research indicates that intrinsic motivation plays a crucial role in long-term skill acquisition {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"The term emotional intelligence encompasses self-awareness, self-regulation, motivation, and social awareness {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Attachment theory describes the dynamics of long-term interpersonal relationships between humans in context {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"Mindfulness-based interventions have demonstrated efficacy in reducing symptoms of anxiety and depression {i}."
+            for i in range(1, 31)
+        ]
+        + [
+            f"In social psychology, cognitive dissonance describes the mental discomfort experienced when holding conflicting beliefs {i}."
+            for i in range(1, 31)
+        ]
+    )
 
     calibration_data = {
         "email": email_calib[:150],
@@ -166,9 +205,11 @@ def build_datasets() -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
 
     return calibration_data, evaluation_data
 
+
 # =============================================================================
 # 2. DETERMINISTIC QUANTITATIVE EVALUATION (NLL & PERPLEXITY)
 # =============================================================================
+
 
 def compute_domain_nll(
     model: nn.Module,
@@ -198,7 +239,9 @@ def compute_domain_nll(
 
             outputs = model(input_ids=input_ids, attention_mask=attn_mask)
             raw_logits = outputs.logits if hasattr(outputs, "logits") else outputs[0]
-            logits = torch.nan_to_num(raw_logits.float(), nan=0.0, posinf=50.0, neginf=-50.0).clamp(-50.0, 50.0)
+            logits = torch.nan_to_num(
+                raw_logits.float(), nan=0.0, posinf=50.0, neginf=-50.0
+            ).clamp(-50.0, 50.0)
 
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = input_ids[..., 1:].contiguous()
@@ -226,9 +269,11 @@ def compute_domain_nll(
     perplexity = math.exp(min(avg_nll, 20.0))
     return avg_nll, perplexity
 
+
 # =============================================================================
 # 3. EXPLICIT INTERFERENCE METRICS
 # =============================================================================
+
 
 def measure_interference_metrics(
     experts: List[nn.Module],
@@ -237,14 +282,15 @@ def measure_interference_metrics(
     """Calculates task vector cosine similarities, sign conflicts, norms, and layerwise ratios."""
     task_vectors = extract_task_vectors(experts, base_model)
     flat_tvs = [
-        torch.cat([v.flatten().float() for v in tv.values()])
-        for tv in task_vectors
+        torch.cat([v.flatten().float() for v in tv.values()]) for tv in task_vectors
     ]
 
     cos_sims = {}
     for i in range(len(flat_tvs)):
         for j in range(i + 1, len(flat_tvs)):
-            sim = F.cosine_similarity(flat_tvs[i].unsqueeze(0), flat_tvs[j].unsqueeze(0)).item()
+            sim = F.cosine_similarity(
+                flat_tvs[i].unsqueeze(0), flat_tvs[j].unsqueeze(0)
+            ).item()
             cos_sims[f"expert_{i+1}_vs_expert_{j+1}"] = round(sim, 4)
 
     # Sign agreement / conflict ratio
@@ -252,9 +298,15 @@ def measure_interference_metrics(
     all_pos = (signs > 0).all(dim=0)
     all_neg = (signs < 0).all(dim=0)
     agreed = (all_pos | all_neg) & (signs != 0).any(dim=0)
-    conflict_ratio = 1.0 - (agreed.float().sum().item() / max((signs != 0).any(dim=0).float().sum().item(), 1.0))
+    conflict_ratio = 1.0 - (
+        agreed.float().sum().item()
+        / max((signs != 0).any(dim=0).float().sum().item(), 1.0)
+    )
 
-    norms = {f"expert_{i+1}_norm": round(ft.norm(2).item(), 4) for i, ft in enumerate(flat_tvs)}
+    norms = {
+        f"expert_{i+1}_norm": round(ft.norm(2).item(), 4)
+        for i, ft in enumerate(flat_tvs)
+    }
 
     # Layerwise norm ratios
     base_sd = base_model.state_dict()
@@ -279,9 +331,11 @@ def measure_interference_metrics(
         "layerwise_norm_ratios": layerwise_ratios,
     }
 
+
 # =============================================================================
 # 4. MAIN EXPERIMENTAL SWEEP & ABLATIONS
 # =============================================================================
+
 
 def run_experiments():
     device = "cpu"
@@ -302,10 +356,14 @@ def run_experiments():
 
     print(f"\n[+] Loading Base Model '{base_id}' and 3 Expert Models...")
     base_model = AutoModelForCausalLM.from_pretrained(base_id).to(device)
-    experts = [AutoModelForCausalLM.from_pretrained(eid).to(device) for eid in expert_ids]
+    experts = [
+        AutoModelForCausalLM.from_pretrained(eid).to(device) for eid in expert_ids
+    ]
 
     calib_data, eval_data = build_datasets()
-    print(f"[✓] Created Calibration (150/domain) and Held-Out Evaluation (150/domain) Corpora.")
+    print(
+        f"[✓] Created Calibration (150/domain) and Held-Out Evaluation (150/domain) Corpora."
+    )
 
     # 1. Compute Base Model & Expert Benchmarks
     print("\n" + "-" * 70)
@@ -315,7 +373,9 @@ def run_experiments():
     domains = ["email", "art", "psychology"]
     base_nlls = {}
     for d in domains:
-        nll, ppl = compute_domain_nll(base_model, tokenizer, eval_data[d], device=device)
+        nll, ppl = compute_domain_nll(
+            base_model, tokenizer, eval_data[d], device=device
+        )
         base_nlls[d] = nll
         print(f" -> Base Model on {d.upper():<10} NLL: {nll:.4f} | PPL: {ppl:.2f}")
 
@@ -335,13 +395,28 @@ def run_experiments():
     print(f" -> Task Vector Norms:          {interference['task_vector_norms']}")
 
     # Build empirical calibration batch for Fisher calculation
-    all_calib_texts = calib_data["email"][:15] + calib_data["art"][:15] + calib_data["psychology"][:15]
-    calibration_batch = tokenizer(all_calib_texts, return_tensors="pt", padding=True, truncation=True, max_length=128)
+    all_calib_texts = (
+        calib_data["email"][:15]
+        + calib_data["art"][:15]
+        + calib_data["psychology"][:15]
+    )
+    calibration_batch = tokenizer(
+        all_calib_texts,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=128,
+    )
 
-    print("\n[+] Precomputing empirical Fisher diagonals across 3 experts (CPU autograd)...")
+    print(
+        "\n[+] Precomputing empirical Fisher diagonals across 3 experts (CPU autograd)..."
+    )
     from daph_hybrid_exfusion_v2_3 import build_empirical_fisher_diagonals
+
     precomputed_fishers = [
-        build_empirical_fisher_diagonals(expert, calibration_batch, device="cpu", micro_batch_size=8)
+        build_empirical_fisher_diagonals(
+            expert, calibration_batch, device="cpu", micro_batch_size=8
+        )
         for expert in experts
     ]
     print("[✓] Empirical Fisher diagonals calculated successfully.")
@@ -355,10 +430,28 @@ def run_experiments():
     merge_methods = {
         "Simple Task Arithmetic": {"merge_mode": "weighted_average"},
         "Plain Averaging": {"merge_mode": "weighted_average"},
-        "TIES-only": {"merge_mode": "full", "dare_base_p": 0.0, "ties_fisher_blend": 0.0},
-        "DARE + TIES": {"merge_mode": "full", "dare_base_p": 0.25, "ties_fisher_blend": 0.0},
-        "Fisher-only": {"merge_mode": "full", "dare_base_p": 0.0, "ties_trim_ratio": 0.0, "ties_fisher_blend": 1.0},
-        "Full ExFusion": {"merge_mode": "full", "dare_base_p": 0.25, "ties_trim_ratio": 0.25, "ties_fisher_blend": 0.50},
+        "TIES-only": {
+            "merge_mode": "full",
+            "dare_base_p": 0.0,
+            "ties_fisher_blend": 0.0,
+        },
+        "DARE + TIES": {
+            "merge_mode": "full",
+            "dare_base_p": 0.25,
+            "ties_fisher_blend": 0.0,
+        },
+        "Fisher-only": {
+            "merge_mode": "full",
+            "dare_base_p": 0.0,
+            "ties_trim_ratio": 0.0,
+            "ties_fisher_blend": 1.0,
+        },
+        "Full ExFusion": {
+            "merge_mode": "full",
+            "dare_base_p": 0.25,
+            "ties_trim_ratio": 0.25,
+            "ties_fisher_blend": 0.50,
+        },
     }
 
     sweep_results = []
@@ -367,31 +460,41 @@ def run_experiments():
         if scale == 0.0:
             # lambda = 0.0 is the Base Model
             avg_ret = 0.0
-            sweep_results.append({
-                "scale": 0.0,
-                "method": "Base Model (Control)",
-                "email_nll": round(base_nlls["email"], 4),
-                "art_nll": round(base_nlls["art"], 4),
-                "psychology_nll": round(base_nlls["psychology"], 4),
-                "R_email": 0.0,
-                "R_art": 0.0,
-                "R_psychology": 0.0,
-                "R_bar": 0.0,
-            })
+            sweep_results.append(
+                {
+                    "scale": 0.0,
+                    "method": "Base Model (Control)",
+                    "email_nll": round(base_nlls["email"], 4),
+                    "art_nll": round(base_nlls["art"], 4),
+                    "psychology_nll": round(base_nlls["psychology"], 4),
+                    "R_email": 0.0,
+                    "R_art": 0.0,
+                    "R_psychology": 0.0,
+                    "R_bar": 0.0,
+                }
+            )
             print(f" -> Scale 0.00 (Base Control) | R_bar:  0.00%")
             continue
 
         for method_name, policy_opts in merge_methods.items():
             merged_container = copy.deepcopy(base_model)
-            
+
             # For Plain Averaging vs Arithmetic
-            w = torch.tensor([1.0, 1.0, 1.0]) if method_name != "Plain Averaging" else torch.tensor([1/3, 1/3, 1/3])
+            w = (
+                torch.tensor([1.0, 1.0, 1.0])
+                if method_name != "Plain Averaging"
+                else torch.tensor([1 / 3, 1 / 3, 1 / 3])
+            )
 
             merge_expert_family(
                 experts=experts,
                 base_model=base_model,
                 memory_bank_weights=w,
-                precomputed_fisher_diagonals=precomputed_fishers if ("Fisher" in method_name or "ExFusion" in method_name) else None,
+                precomputed_fisher_diagonals=(
+                    precomputed_fishers
+                    if ("Fisher" in method_name or "ExFusion" in method_name)
+                    else None
+                ),
                 apply_to=merged_container,
                 scale=scale if method_name != "Plain Averaging" else scale * 3.0,
                 policies=policy_opts,
@@ -401,9 +504,11 @@ def run_experiments():
             res_dict = {"scale": scale, "method": method_name}
             ret_scores = []
             for d in domains:
-                nll, _ = compute_domain_nll(merged_container, tokenizer, eval_data[d], device=device)
+                nll, _ = compute_domain_nll(
+                    merged_container, tokenizer, eval_data[d], device=device
+                )
                 res_dict[f"{d}_nll"] = round(nll, 4)
-                
+
                 # Retention Score R_d = (NLL_base - NLL_merged) / (NLL_base - NLL_expert)
                 denom = base_nlls[d] - expert_nlls[d]
                 r_d = ((base_nlls[d] - nll) / denom) * 100.0 if denom != 0 else 0.0
@@ -415,7 +520,9 @@ def run_experiments():
             sweep_results.append(res_dict)
 
             if method_name in ("Full ExFusion", "Simple Task Arithmetic"):
-                print(f" -> Scale {scale:.2f} ({method_name:<22}) | R_bar: {r_bar:>6.2f}% | Email R: {ret_scores[0]:>5.1f}% | Art R: {ret_scores[1]:>5.1f}% | Psych R: {ret_scores[2]:>5.1f}%")
+                print(
+                    f" -> Scale {scale:.2f} ({method_name:<22}) | R_bar: {r_bar:>6.2f}% | Email R: {ret_scores[0]:>5.1f}% | Art R: {ret_scores[1]:>5.1f}% | Psych R: {ret_scores[2]:>5.1f}%"
+                )
 
     # 4. Save Artifacts
     os.makedirs("artifacts", exist_ok=True)
@@ -445,7 +552,9 @@ def generate_results_md(data: Dict[str, Any]) -> None:
 
     # Find best provisional scale for Full ExFusion
     exfusion_sweeps = [s for s in sweep if s.get("method") == "Full ExFusion"]
-    best_exfusion = max(exfusion_sweeps, key=lambda x: x["R_bar"]) if exfusion_sweeps else sweep[0]
+    best_exfusion = (
+        max(exfusion_sweeps, key=lambda x: x["R_bar"]) if exfusion_sweeps else sweep[0]
+    )
 
     md_content = f"""# DAPH NeSy-MoE & ExFusion Quantitative Experiment Results
 

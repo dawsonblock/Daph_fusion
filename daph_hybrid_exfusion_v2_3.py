@@ -79,7 +79,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-
 # =============================================================================
 # 1. CORE POLICY & HELPERS
 # =============================================================================
@@ -87,9 +86,18 @@ from torch import Tensor
 DEFAULT_MAMBA_POLICIES: Dict[str, Any] = {
     "ssm_groups": ["A_log", "D", "dt_proj"],
     "proj_groups": [
-        "in_proj", "conv1d", "out_proj", "q_proj", "k_proj",
-        "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj",
-        "fc1", "fc2",
+        "in_proj",
+        "conv1d",
+        "out_proj",
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "up_proj",
+        "down_proj",
+        "gate_proj",
+        "fc1",
+        "fc2",
     ],
     "ssm_drop_reduction": 0.5,
     "ssm_soft_merge": True,
@@ -100,7 +108,7 @@ DEFAULT_MAMBA_POLICIES: Dict[str, Any] = {
     "ties_trim_ratio": 0.2,
     "sign_mode": "majority",
     "ties_fisher_blend": 0.5,
-    "merge_mode": "full",   # "full" | "weighted_average"
+    "merge_mode": "full",  # "full" | "weighted_average"
 }
 
 
@@ -109,7 +117,9 @@ LossFn = Callable[[Any, Any], Tensor]
 ForwardFn = Callable[[nn.Module, Any], Any]
 
 
-def _validate_probability(name: str, value: float, *, inclusive_one: bool = True) -> None:
+def _validate_probability(
+    name: str, value: float, *, inclusive_one: bool = True
+) -> None:
     upper_ok = value <= 1.0 if inclusive_one else value < 1.0
     if not math.isfinite(value) or value < 0.0 or not upper_ok:
         bound = "[0, 1]" if inclusive_one else "[0, 1)"
@@ -146,7 +156,9 @@ def is_ssm_core_param(
     for token in ssm_groups:
         token_lower = str(token).lower()
         if token_lower == "d":
-            if "d" in tokens_lower and ("ssm" in name_lower or "mamba" in name_lower or "exfusion" in name_lower):
+            if "d" in tokens_lower and (
+                "ssm" in name_lower or "mamba" in name_lower or "exfusion" in name_lower
+            ):
                 return True
         elif token_lower in name_lower:
             return True
@@ -154,7 +166,11 @@ def is_ssm_core_param(
     joined = "_".join(tokens)
     if "a_log" in joined or "dt_proj" in joined:
         return True
-    return bool(tokens) and tokens[-1] == "d" and ("ssm" in name_lower or "mamba" in name_lower or "exfusion" in name_lower)
+    return (
+        bool(tokens)
+        and tokens[-1] == "d"
+        and ("ssm" in name_lower or "mamba" in name_lower or "exfusion" in name_lower)
+    )
 
 
 def is_projection_param(
@@ -283,12 +299,16 @@ def _normalize_expert_weights(
     return weights
 
 
-def _validate_homogeneous_task_vectors(task_vectors: List[Dict[str, Tensor]]) -> List[str]:
+def _validate_homogeneous_task_vectors(
+    task_vectors: List[Dict[str, Tensor]],
+) -> List[str]:
     if not task_vectors:
         raise ValueError("No task vectors provided")
     reference_keys = list(task_vectors[0].keys())
     if not reference_keys:
-        raise ValueError("Task vectors are empty; expert/base parameter names do not match")
+        raise ValueError(
+            "Task vectors are empty; expert/base parameter names do not match"
+        )
     reference_set = set(reference_keys)
     for index, task_vector in enumerate(task_vectors[1:], start=1):
         if set(task_vector) != reference_set:
@@ -318,7 +338,9 @@ def extract_task_vectors(
 ) -> List[Dict[str, Tensor]]:
     if not experts:
         raise ValueError("At least one expert is required")
-    base_sd = {name: value.detach().clone() for name, value in base.state_dict().items()}
+    base_sd = {
+        name: value.detach().clone() for name, value in base.state_dict().items()
+    }
     task_vectors: List[Dict[str, Tensor]] = []
 
     for expert_index, expert in enumerate(experts):
@@ -413,7 +435,9 @@ def difficulty_weighted_ties_merge(
 ) -> Dict[str, Tensor]:
     _validate_probability("trim_ratio", trim_ratio, inclusive_one=False)
     if sign_mode != "majority":
-        raise ValueError(f"Unsupported sign_mode '{sign_mode}'; only 'majority' is implemented")
+        raise ValueError(
+            f"Unsupported sign_mode '{sign_mode}'; only 'majority' is implemented"
+        )
 
     names = _validate_homogeneous_task_vectors(task_vectors)
     num_experts = len(task_vectors)
@@ -473,7 +497,9 @@ def _move_batch_to_device(batch: Any, device: Union[str, torch.device]) -> Any:
     if isinstance(batch, Tensor):
         return batch.to(device)
     if isinstance(batch, Mapping):
-        return {key: _move_batch_to_device(value, device) for key, value in batch.items()}
+        return {
+            key: _move_batch_to_device(value, device) for key, value in batch.items()
+        }
     if isinstance(batch, tuple):
         return tuple(_move_batch_to_device(value, device) for value in batch)
     if isinstance(batch, list):
@@ -501,7 +527,7 @@ def _batch_size(batch: Any) -> int:
 
 def _slice_batch(batch: Any, index: int) -> Any:
     if isinstance(batch, Tensor):
-        return batch[index:index + 1]
+        return batch[index : index + 1]
     if isinstance(batch, Mapping):
         return {key: _slice_batch(value, index) for key, value in batch.items()}
     if isinstance(batch, tuple):
@@ -541,7 +567,11 @@ def _default_fisher_loss(output: Any, sample: Any) -> Tensor:
     if isinstance(sample, Mapping) and "input_ids" in sample:
         logits = _extract_logits(output)
         input_ids = sample["input_ids"]
-        if logits.dim() == 3 and input_ids.dim() == 2 and logits.shape[1] == input_ids.shape[1]:
+        if (
+            logits.dim() == 3
+            and input_ids.dim() == 2
+            and logits.shape[1] == input_ids.shape[1]
+        ):
             shift_logits = logits[..., :-1, :].contiguous().float()
             shift_labels = input_ids[..., 1:].contiguous()
             attn_mask = sample.get("attention_mask", None)
@@ -575,6 +605,7 @@ def build_empirical_fisher_diagonals(
     loss_fn: Optional[LossFn] = None,
     device: Union[str, torch.device] = "cpu",
     micro_batch_size: int = 1,
+    offload_to_cpu: bool = False,
 ) -> Dict[str, Tensor]:
     """Empirical diagonal Fisher via per-sample gradient accumulation.
 
@@ -590,9 +621,12 @@ def build_empirical_fisher_diagonals(
 
     original_training = model.training
     first_parameter = next(model.parameters(), None)
-    original_device = first_parameter.device if first_parameter is not None else torch.device("cpu")
+    original_device = (
+        first_parameter.device if first_parameter is not None else torch.device("cpu")
+    )
+    accum_device = torch.device("cpu") if offload_to_cpu else torch.device(device)
     fisher = {
-        name: torch.zeros_like(parameter, device=device, dtype=torch.float32)
+        name: torch.zeros_like(parameter, device=accum_device, dtype=torch.float32)
         for name, parameter in model.named_parameters()
         if parameter.requires_grad
     }
@@ -617,7 +651,10 @@ def build_empirical_fisher_diagonals(
 
                 for name, parameter in model.named_parameters():
                     if parameter.requires_grad and parameter.grad is not None:
-                        fisher[name] += parameter.grad.detach().float().square() / batch_size
+                        grad_sq = parameter.grad.detach().float().square()
+                        if offload_to_cpu:
+                            grad_sq = grad_sq.to("cpu")
+                        fisher[name] += grad_sq / batch_size
         else:
             # Approximate path: mean gradient per micro-batch, squared.
             for start in range(0, batch_size, micro_batch_size):
@@ -627,8 +664,10 @@ def build_empirical_fisher_diagonals(
                 if isinstance(batch, Tensor):
                     sub_batch = torch.cat(samples, dim=0)
                 elif isinstance(batch, Mapping):
-                    sub_batch = {k: torch.cat([s[k] for s in samples], dim=0)
-                                 for k in batch.keys()}
+                    sub_batch = {
+                        k: torch.cat([s[k] for s in samples], dim=0)
+                        for k in batch.keys()
+                    }
                 else:
                     sub_batch = samples
                 output = forward(model, sub_batch)
@@ -639,7 +678,10 @@ def build_empirical_fisher_diagonals(
                 weight = len(indices) / batch_size
                 for name, parameter in model.named_parameters():
                     if parameter.requires_grad and parameter.grad is not None:
-                        fisher[name] += parameter.grad.detach().float().square() * weight
+                        grad_sq = parameter.grad.detach().float().square()
+                        if offload_to_cpu:
+                            grad_sq = grad_sq.to("cpu")
+                        fisher[name] += grad_sq * weight
     finally:
         model.zero_grad(set_to_none=True)
         model.to(original_device)
@@ -800,9 +842,7 @@ def _selective_scan_impl(
             * xin_f[:, token_index].unsqueeze(-1)
         )
         state = transition * state + input_term
-        projected = (
-            state * c_f[:, token_index].unsqueeze(1)
-        ).sum(dim=-1)
+        projected = (state * c_f[:, token_index].unsqueeze(1)).sum(dim=-1)
         outputs.append(projected)
 
     y = torch.stack(outputs, dim=1)
@@ -824,8 +864,38 @@ def register_scan_backend(
     _SCAN_BACKENDS[name] = fn
 
 
+try:
+    import mamba_ssm.ops.selective_scan_interface as mamba_ssm_ops
+
+    def _triton_scan_adapter(xin, b_matrix, c_matrix, dt, a_matrix, d_skip, h_init):
+        out = mamba_ssm_ops.selective_scan_fn(
+            xin.transpose(1, 2),
+            dt.transpose(1, 2),
+            a_matrix,
+            b_matrix.transpose(1, 2),
+            c_matrix.transpose(1, 2),
+            d_skip,
+            z=None,
+            delta_bias=None,
+            delta_softplus=False,
+        )
+        return out.transpose(1, 2), h_init
+
+    register_scan_backend("triton", _triton_scan_adapter)
+    if "DAPH_SCAN_BACKEND" not in os.environ:
+        os.environ["DAPH_SCAN_BACKEND"] = "triton"
+except ImportError:
+    pass
+
+
 def dispatch_selective_scan(
-    xin, b_matrix, c_matrix, dt, a_matrix, d_skip, h_init,
+    xin,
+    b_matrix,
+    c_matrix,
+    dt,
+    a_matrix,
+    d_skip,
+    h_init,
 ) -> Tuple[Tensor, Tensor]:
     """Route the scan to a registered backend (DAPH_SCAN_BACKEND) or fall
     back to the compiled/eager FP32 reference implementation."""
@@ -835,13 +905,14 @@ def dispatch_selective_scan(
         if backend not in _SCAN_BACKENDS:
             raise ValueError(
                 f"DAPH_SCAN_BACKEND='{backend}' not registered; "
-                f"available: {sorted(_SCAN_BACKENDS)}")
+                f"available: {sorted(_SCAN_BACKENDS)}"
+            )
         return _SCAN_BACKENDS[backend](
-            xin, b_matrix, c_matrix, dt, a_matrix, d_skip, h_init)
+            xin, b_matrix, c_matrix, dt, a_matrix, d_skip, h_init
+        )
     if _COMPILED_FALLBACK is None:
         _COMPILED_FALLBACK = _maybe_compiled_scan()
-    return _COMPILED_FALLBACK(
-        xin, b_matrix, c_matrix, dt, a_matrix, d_skip, h_init)
+    return _COMPILED_FALLBACK(xin, b_matrix, c_matrix, dt, a_matrix, d_skip, h_init)
 
 
 def _maybe_compiled_scan() -> Callable[..., Tuple[Tensor, Tensor]]:
@@ -1021,9 +1092,8 @@ class MemoryBankExFusionFFN(nn.Module):
         routing_weights = F.softmax(router_logits, dim=-1)
         output = torch.zeros_like(hidden_states)
         for expert_index, expert in enumerate(self.expert_ffn):
-            output += (
-                routing_weights[..., expert_index:expert_index + 1]
-                * expert(hidden_states)
+            output += routing_weights[..., expert_index : expert_index + 1] * expert(
+                hidden_states
             )
         return self.layer_norm(output + hidden_states)
 
@@ -1095,14 +1165,15 @@ class MemoryBankExFusionMamba(nn.Module):
         for expert_index, expert in enumerate(self.expert_mamba):
             state_in = None if state is None else state[expert_index]
             expert_output, state_out = expert(
-                hidden_states, state_in, mask,
+                hidden_states,
+                state_in,
+                mask,
                 bypass_decay=self.bypass_decay,
             )
             next_states.append(state_out)
-            output += (
-                routing_weights[..., expert_index:expert_index + 1]
-                * self.dropout(expert_output)
-            )
+            output += routing_weights[
+                ..., expert_index : expert_index + 1
+            ] * self.dropout(expert_output)
 
         output = self.layer_norm(output + hidden_states)
         return output, next_states if return_state else None
@@ -1163,7 +1234,11 @@ class PredictiveDifficultyMacroRouter(nn.Module):
             for key in ("entropy", "max_prob", "variance", "difficulty_score"):
                 value = difficulty_metrics.get(key)
                 if value is None:
-                    shape = (batch_size,) if self.granularity == "batch" else (batch_size, seq_len)
+                    shape = (
+                        (batch_size,)
+                        if self.granularity == "batch"
+                        else (batch_size, seq_len)
+                    )
                     value = torch.zeros(shape, device=hidden_states.device)
                 value = value.float().to(hidden_states.device)
 
@@ -1181,7 +1256,9 @@ class PredictiveDifficultyMacroRouter(nn.Module):
                         elif value.shape[0] == batch_size:
                             value = value.unsqueeze(1).expand(batch_size, seq_len)
                         else:
-                            value = value.mean().reshape(1, 1).expand(batch_size, seq_len)
+                            value = (
+                                value.mean().reshape(1, 1).expand(batch_size, seq_len)
+                            )
                     elif value.shape != (batch_size, seq_len):
                         value = value.mean().reshape(1, 1).expand(batch_size, seq_len)
                 components.append(value)
@@ -1202,13 +1279,10 @@ def router_auxiliary_loss(path_probs: Tensor, num_paths: int) -> Tensor:
     flattened = path_probs.reshape(-1, path_probs.shape[-1])
     with torch.no_grad():
         hard_idx = flattened.argmax(dim=-1)
-        f_i = torch.stack([(hard_idx == i).float().mean()
-                           for i in range(num_paths)])
+        f_i = torch.stack([(hard_idx == i).float().mean() for i in range(num_paths)])
     P_i = flattened.mean(dim=0)
     load_balance = num_paths * (f_i * P_i).sum()
-    entropy = -(
-        flattened * torch.log(flattened.clamp_min(1e-10))
-    ).sum(dim=-1).mean()
+    entropy = -(flattened * torch.log(flattened.clamp_min(1e-10))).sum(dim=-1).mean()
     # Minimizing this term penalizes both collapse and excessive uncertainty.
     return load_balance + 0.1 * entropy
 
@@ -1226,7 +1300,9 @@ def _top_p_probabilities(probabilities: Tensor, top_p: float) -> Tensor:
     keep_sorted[..., 0] = True
 
     filtered_sorted = sorted_probs * keep_sorted.to(sorted_probs.dtype)
-    filtered = torch.zeros_like(probabilities).scatter(-1, sorted_indices, filtered_sorted)
+    filtered = torch.zeros_like(probabilities).scatter(
+        -1, sorted_indices, filtered_sorted
+    )
     return filtered / filtered.sum(dim=-1, keepdim=True).clamp_min(1e-12)
 
 
@@ -1262,12 +1338,17 @@ class DAPHConfig:
     def __post_init__(self) -> None:
         if self.hidden_size <= 0 or self.intermediate_size <= 0:
             raise ValueError("hidden_size and intermediate_size must be positive")
-        if self.num_attention_heads <= 0 or self.hidden_size % self.num_attention_heads != 0:
+        if (
+            self.num_attention_heads <= 0
+            or self.hidden_size % self.num_attention_heads != 0
+        ):
             raise ValueError("num_attention_heads must divide hidden_size")
         if self.state_size <= 0 or self.num_experts <= 0:
             raise ValueError("state_size and num_experts must be positive")
         if self.num_paths not in {4, 5}:
-            raise ValueError("This implementation currently requires num_paths in {4, 5}")
+            raise ValueError(
+                "This implementation currently requires num_paths in {4, 5}"
+            )
         if self.routing_granularity not in {"batch", "token"}:
             raise ValueError("routing_granularity must be 'batch' or 'token'")
         if self.routing_mode not in {"hard", "soft", "top_p"}:
@@ -1357,7 +1438,10 @@ class DAPHHybridDecoderLayer(nn.Module):
                 dtype=torch.bool,
                 device=device,
             )
-        if attention_mask.dim() != 2 or attention_mask.shape != (batch_size, current_length):
+        if attention_mask.dim() != 2 or attention_mask.shape != (
+            batch_size,
+            current_length,
+        ):
             raise ValueError(
                 "attention_mask must have shape (B, current_length) with 1/True for valid "
                 f"tokens; got {tuple(attention_mask.shape)}"
@@ -1414,9 +1498,16 @@ class DAPHHybridDecoderLayer(nn.Module):
     ) -> Tensor:
         batch_size, current_length, _ = hidden_states.shape
         history_length = 0 if attn_state is None else attn_state.shape[1]
-        key_value = hidden_states if attn_state is None else torch.cat(
-            [attn_state.to(hidden_states.device, hidden_states.dtype), hidden_states],
-            dim=1,
+        key_value = (
+            hidden_states
+            if attn_state is None
+            else torch.cat(
+                [
+                    attn_state.to(hidden_states.device, hidden_states.dtype),
+                    hidden_states,
+                ],
+                dim=1,
+            )
         )
         causal_mask = self._causal_attention_mask(
             current_length,
@@ -1506,9 +1597,7 @@ class DAPHHybridDecoderLayer(nn.Module):
                 hidden_states.shape[1],
                 self.config.num_paths,
             )
-        return (
-            stacked * route_weights.unsqueeze(-1)
-        ).sum(dim=-2)
+        return (stacked * route_weights.unsqueeze(-1)).sum(dim=-2)
 
     def forward(
         self,
@@ -1553,19 +1642,14 @@ class DAPHHybridDecoderLayer(nn.Module):
         if effective_mode == "hard":
             selected = path_probs.argmax(dim=-1)
             if selected.dim() == 1:
-                mamba_mask = (
-                    selected.eq(self.MAMBA_PATH)
-                    .unsqueeze(1)
-                    .expand(batch_size, seq_len)
-                    .to(hidden_states.dtype)
-                    * valid_token_mask.to(hidden_states.dtype)
-                )
+                mamba_mask = selected.eq(self.MAMBA_PATH).unsqueeze(1).expand(
+                    batch_size, seq_len
+                ).to(hidden_states.dtype) * valid_token_mask.to(hidden_states.dtype)
                 required_paths = selected.unique().tolist()
             else:
-                mamba_mask = (
-                    selected.eq(self.MAMBA_PATH).to(hidden_states.dtype)
-                    * valid_token_mask.to(hidden_states.dtype)
-                )
+                mamba_mask = selected.eq(self.MAMBA_PATH).to(
+                    hidden_states.dtype
+                ) * valid_token_mask.to(hidden_states.dtype)
                 required_paths = selected.unique().tolist()
 
             # Token-level hard routing: sequence-dependent paths (Attention,
@@ -1574,10 +1658,16 @@ class DAPHHybridDecoderLayer(nn.Module):
             # preserving each token's own difficulty values.
             token_level = selected.dim() == 2
             if token_level:
-                seq_paths = [p for p in required_paths
-                             if p in (self.ATTENTION_PATH, self.MAMBA_PATH)]
-                point_paths = [p for p in required_paths
-                               if p in (self.TRANSFORMER_PATH, self.CHEAP_PATH)]
+                seq_paths = [
+                    p
+                    for p in required_paths
+                    if p in (self.ATTENTION_PATH, self.MAMBA_PATH)
+                ]
+                point_paths = [
+                    p
+                    for p in required_paths
+                    if p in (self.TRANSFORMER_PATH, self.CHEAP_PATH)
+                ]
             else:
                 seq_paths = required_paths
                 point_paths = []
@@ -1609,14 +1699,14 @@ class DAPHHybridDecoderLayer(nn.Module):
                         output,
                     )
                 for path in point_paths:
-                    token_selector = selected.eq(path)          # [B, L]
+                    token_selector = selected.eq(path)  # [B, L]
                     if not token_selector.any():
                         continue
                     b_idx, t_idx = torch.where(token_selector)
                     sparse_tokens = hidden_states[b_idx, t_idx].unsqueeze(1)
                     sparse_dm = _gather_difficulty(
-                        difficulty_metrics, b_idx, t_idx,
-                        batch_size, seq_len)
+                        difficulty_metrics, b_idx, t_idx, batch_size, seq_len
+                    )
                     if path == self.TRANSFORMER_PATH:
                         sparse_out = self.trans_exfusion(sparse_tokens, sparse_dm)
                     else:
@@ -1625,9 +1715,13 @@ class DAPHHybridDecoderLayer(nn.Module):
             meta["selected_paths"] = selected
 
         else:
-            route_weights = path_probs if effective_mode == "soft" else _top_p_probabilities(
-                path_probs,
-                self.config.routing_top_p,
+            route_weights = (
+                path_probs
+                if effective_mode == "soft"
+                else _top_p_probabilities(
+                    path_probs,
+                    self.config.routing_top_p,
+                )
             )
             mamba_mask = valid_token_mask.to(hidden_states.dtype)
             path_outputs, next_mamba_state = self._path_outputs(
@@ -1654,9 +1748,13 @@ class DAPHHybridDecoderLayer(nn.Module):
 
             detached_current = hidden_states.detach()
             current_padding = ~valid_token_mask
-            new_attn_state = detached_current if attn_state is None else torch.cat(
-                [attn_state.detach(), detached_current],
-                dim=1,
+            new_attn_state = (
+                detached_current
+                if attn_state is None
+                else torch.cat(
+                    [attn_state.detach(), detached_current],
+                    dim=1,
+                )
             )
             if attn_state is None:
                 if attn_padding_state is not None:
@@ -1676,9 +1774,9 @@ class DAPHHybridDecoderLayer(nn.Module):
                             f"attn_padding_state shape {tuple(attn_padding_state.shape)}; "
                             f"expected {(batch_size, attn_state.shape[1])}"
                         )
-                    previous_padding = attn_padding_state.detach().to(
-                        current_padding.device
-                    ).bool()
+                    previous_padding = (
+                        attn_padding_state.detach().to(current_padding.device).bool()
+                    )
                 new_attn_padding_state = torch.cat(
                     [previous_padding, current_padding],
                     dim=1,
@@ -1691,28 +1789,46 @@ class DAPHHybridDecoderLayer(nn.Module):
                     # Anchor the first `sinks` tokens (attention sinks,
                     # arXiv:2309.17453) and slide the remainder of the window.
                     new_attn_state = torch.cat(
-                        [new_attn_state[:, :sinks],
-                         new_attn_state[:, -(window - sinks):]], dim=1)
+                        [
+                            new_attn_state[:, :sinks],
+                            new_attn_state[:, -(window - sinks) :],
+                        ],
+                        dim=1,
+                    )
                     new_attn_padding_state = torch.cat(
-                        [new_attn_padding_state[:, :sinks],
-                         new_attn_padding_state[:, -(window - sinks):]], dim=1)
+                        [
+                            new_attn_padding_state[:, :sinks],
+                            new_attn_padding_state[:, -(window - sinks) :],
+                        ],
+                        dim=1,
+                    )
                     sink_pos = torch.arange(sinks, device=hidden_states.device)
                     sliding_pos = torch.arange(
-                        total_pos - (window - sinks), total_pos, device=hidden_states.device
+                        total_pos - (window - sinks),
+                        total_pos,
+                        device=hidden_states.device,
                     )
-                    meta["attn_position_ids"] = torch.cat(
-                        [sink_pos, sliding_pos], dim=0
-                    ).unsqueeze(0).expand(batch_size, -1)
+                    meta["attn_position_ids"] = (
+                        torch.cat([sink_pos, sliding_pos], dim=0)
+                        .unsqueeze(0)
+                        .expand(batch_size, -1)
+                    )
                 else:
                     new_attn_state = new_attn_state[:, -window:, :]
                     new_attn_padding_state = new_attn_padding_state[:, -window:]
-                    meta["attn_position_ids"] = torch.arange(
-                        total_pos - window, total_pos, device=hidden_states.device
-                    ).unsqueeze(0).expand(batch_size, -1)
+                    meta["attn_position_ids"] = (
+                        torch.arange(
+                            total_pos - window, total_pos, device=hidden_states.device
+                        )
+                        .unsqueeze(0)
+                        .expand(batch_size, -1)
+                    )
             else:
-                meta["attn_position_ids"] = torch.arange(
-                    new_attn_state.shape[1], device=hidden_states.device
-                ).unsqueeze(0).expand(batch_size, -1)
+                meta["attn_position_ids"] = (
+                    torch.arange(new_attn_state.shape[1], device=hidden_states.device)
+                    .unsqueeze(0)
+                    .expand(batch_size, -1)
+                )
             meta["attn_state"] = new_attn_state
             meta["attn_padding_state"] = new_attn_padding_state
 
@@ -1730,14 +1846,16 @@ def _resolve_suffix_matches(
     shape: torch.Size,
 ) -> List[str]:
     exact = [
-        key for key, parameter in target_parameters.items()
+        key
+        for key, parameter in target_parameters.items()
         if key == name and parameter.shape == shape
     ]
     if exact:
         return exact
 
     dotted = [
-        key for key, parameter in target_parameters.items()
+        key
+        for key, parameter in target_parameters.items()
         if key.endswith("." + name) and parameter.shape == shape
     ]
     if dotted:
@@ -1745,7 +1863,8 @@ def _resolve_suffix_matches(
 
     terminal_name = name.split(".")[-1]
     return [
-        key for key, parameter in target_parameters.items()
+        key
+        for key, parameter in target_parameters.items()
         if key.split(".")[-1] == terminal_name and parameter.shape == shape
     ]
 
@@ -1823,17 +1942,21 @@ def merge_expert_family(
     if merge_mode == "weighted_average":
         names = _validate_homogeneous_task_vectors(task_vectors)
         merged = {
-            name: sum(weights[i] * task_vectors[i][name]
-                      for i in range(len(task_vectors)))
+            name: sum(
+                weights[i] * task_vectors[i][name] for i in range(len(task_vectors))
+            )
             for name in names
         }
         if apply_to is not None:
-            _apply_delta_to_module(apply_to, merged, scale=scale,
-                                   require_full_coverage=True)
+            _apply_delta_to_module(
+                apply_to, merged, scale=scale, require_full_coverage=True
+            )
         return merged
     if merge_mode != "full":
-        raise ValueError(f"Unknown merge_mode '{merge_mode}' "
-                         f"(expected 'full' or 'weighted_average')")
+        raise ValueError(
+            f"Unknown merge_mode '{merge_mode}' "
+            f"(expected 'full' or 'weighted_average')"
+        )
     task_vectors, keep_masks = apply_dare_preprocessing(
         task_vectors,
         difficulty_importance,
@@ -1901,7 +2024,9 @@ def merge_expert_family(
     )
 
     if apply_to is not None:
-        _apply_delta_to_module(apply_to, merged, scale=scale, require_full_coverage=True)
+        _apply_delta_to_module(
+            apply_to, merged, scale=scale, require_full_coverage=True
+        )
     return merged
 
 
@@ -1988,7 +2113,9 @@ def merge_mamba_transformer_hybrid(
 
     if has_mamba:
         if mamba_base_model is None:
-            raise ValueError("mamba_base_model is required when mamba_experts are provided")
+            raise ValueError(
+                "mamba_base_model is required when mamba_experts are provided"
+            )
         if mamba_memory_bank_weights is None:
             raise ValueError("mamba_memory_bank_weights is required")
         result["mamba"] = merge_expert_family(
@@ -2037,18 +2164,28 @@ def merge_mamba_transformer_hybrid(
 
 
 class _ForcedRouter(nn.Module):
-    def __init__(self, num_paths: int, selected_path: int, granularity: str = "token") -> None:
+    def __init__(
+        self, num_paths: int, selected_path: int, granularity: str = "token"
+    ) -> None:
         super().__init__()
         self.num_paths = num_paths
         self.selected_path = selected_path
         self.granularity = granularity
 
-    def forward(self, hidden_states: Tensor, difficulty_metrics: Optional[Dict[str, Tensor]] = None) -> Tensor:
+    def forward(
+        self,
+        hidden_states: Tensor,
+        difficulty_metrics: Optional[Dict[str, Tensor]] = None,
+    ) -> Tensor:
         batch_size, seq_len = hidden_states.shape[:2]
-        shape = (batch_size, self.num_paths) if self.granularity == "batch" else (
-            batch_size,
-            seq_len,
-            self.num_paths,
+        shape = (
+            (batch_size, self.num_paths)
+            if self.granularity == "batch"
+            else (
+                batch_size,
+                seq_len,
+                self.num_paths,
+            )
         )
         logits = torch.full(shape, -30.0, device=hidden_states.device)
         logits[..., self.selected_path] = 30.0
@@ -2120,7 +2257,7 @@ def run_self_test() -> None:
     stream_padding_state = None
     for token_index in range(stream_input.shape[1]):
         token_output, token_meta = attention_layer(
-            stream_input[:, token_index:token_index + 1],
+            stream_input[:, token_index : token_index + 1],
             use_cache=True,
             mamba_state=stream_mamba_state,
             attn_state=stream_attn_state,
@@ -2168,7 +2305,7 @@ def run_self_test() -> None:
     stream_padding_state = None
     for token_index in range(mamba_sequence.shape[1]):
         token_output, token_meta = mamba_layer(
-            mamba_sequence[:, token_index:token_index + 1],
+            mamba_sequence[:, token_index : token_index + 1],
             use_cache=True,
             mamba_state=stream_mamba_state,
             attn_state=stream_attn_state,
@@ -2191,7 +2328,9 @@ def run_self_test() -> None:
             attn_state=stream_attn_state,
             attn_padding_state=stream_padding_state,
         )
-        for state_before, state_after in zip(before_padding, padded_meta["mamba_state"]):
+        for state_before, state_after in zip(
+            before_padding, padded_meta["mamba_state"]
+        ):
             assert torch.equal(state_before, state_after)
 
     # 3. Masked SSM steps leave recurrent state unchanged.
@@ -2286,7 +2425,9 @@ def run_self_test() -> None:
     top_p_output, top_p_meta = top_p_layer(torch.randn(2, 3, 32))
     assert top_p_output.shape == (2, 3, 32)
     route_weights = top_p_meta["route_weights"]
-    assert torch.allclose(route_weights.sum(dim=-1), torch.ones_like(route_weights[..., 0]))
+    assert torch.allclose(
+        route_weights.sum(dim=-1), torch.ones_like(route_weights[..., 0])
+    )
     assert (route_weights == 0).any()
 
     # 10. Difficulty metrics remain finite for batch-size one and length one.
@@ -2301,7 +2442,7 @@ def run_self_test() -> None:
     x_pt = torch.randn(2, 3, 32)
     none_blocked = torch.zeros(2, 3, dtype=torch.bool)  # pytorch: nothing blocked
     out_pt, _ = layer_pt(x_pt, attention_mask=none_blocked)
-    out_none, _ = layer_pt(x_pt)                        # no mask == all valid
+    out_none, _ = layer_pt(x_pt)  # no mask == all valid
     assert torch.allclose(out_pt, out_none, atol=1e-5)
     mostly_blocked = torch.ones(2, 3, dtype=torch.bool)
     mostly_blocked[:, 0] = False
@@ -2310,17 +2451,24 @@ def run_self_test() -> None:
     print("11. mask_convention pytorch inversion (none-blocked == no mask) OK")
 
     # 12. Canonical Switch aux loss: hard f_i x soft P_i, gradient flows.
-    probs = torch.tensor([[0.9, 0.05, 0.03, 0.02],
-                          [0.8, 0.10, 0.05, 0.05]], requires_grad=True)
+    probs = torch.tensor(
+        [[0.9, 0.05, 0.03, 0.02], [0.8, 0.10, 0.05, 0.05]], requires_grad=True
+    )
     lb = router_auxiliary_loss(probs, 4)
     lb.backward()
     assert probs.grad is not None and probs.grad.abs().sum() > 0
-    confident_balanced = torch.tensor([
-        [0.97, 0.01, 0.01, 0.01], [0.01, 0.97, 0.01, 0.01],
-        [0.01, 0.01, 0.97, 0.01], [0.01, 0.01, 0.01, 0.97]])
+    confident_balanced = torch.tensor(
+        [
+            [0.97, 0.01, 0.01, 0.01],
+            [0.01, 0.97, 0.01, 0.01],
+            [0.01, 0.01, 0.97, 0.01],
+            [0.01, 0.01, 0.01, 0.97],
+        ]
+    )
     uncertain_uniform = torch.full((4, 4), 0.25)
-    assert (router_auxiliary_loss(confident_balanced, 4)
-            < router_auxiliary_loss(uncertain_uniform, 4))
+    assert router_auxiliary_loss(confident_balanced, 4) < router_auxiliary_loss(
+        uncertain_uniform, 4
+    )
     print("12. canonical Switch aux loss (grad + ordering) OK")
 
     # 13. merge_mode="weighted_average" applies and unknown modes raise.
@@ -2336,14 +2484,17 @@ def run_self_test() -> None:
     changed = any(
         not torch.allclose(p_t, p_b)
         for (n_t, p_t), (n_b, p_b) in zip(
-            wa_target.named_parameters(), base.named_parameters())
+            wa_target.named_parameters(), base.named_parameters()
+        )
     )
     assert changed, "weighted_average merge changed nothing"
     try:
         merge_expert_family(
-            experts=experts, base_model=base,
+            experts=experts,
+            base_model=base,
             memory_bank_weights=torch.tensor([0.6, 0.4]),
-            policies={"merge_mode": "bogus"})
+            policies={"merge_mode": "bogus"},
+        )
         raise AssertionError("bogus merge_mode accepted")
     except ValueError:
         pass
@@ -2354,8 +2505,8 @@ def run_self_test() -> None:
         def forward(self, hidden_states, difficulty_metrics=None):
             B, L, _ = hidden_states.shape
             logits = torch.full((B, L, 4), -30.0)
-            logits[:, 0::2, 2] = 30.0   # even tokens -> Trans-ExFusion
-            logits[:, 1::2, 3] = 30.0   # odd tokens  -> Cheap
+            logits[:, 0::2, 2] = 30.0  # even tokens -> Trans-ExFusion
+            logits[:, 1::2, 3] = 30.0  # odd tokens  -> Cheap
             return logits
 
     sparse_cfg = copy.deepcopy(attention_config)
@@ -2386,12 +2537,17 @@ def run_self_test() -> None:
         _, m = sink_layer(first_token, use_cache=True)
         hist, pad = m["attn_state"], m["attn_padding_state"]
         for _ in range(7):
-            _, m = sink_layer(torch.randn(2, 1, 32), use_cache=True,
-                              attn_state=hist, attn_padding_state=pad)
+            _, m = sink_layer(
+                torch.randn(2, 1, 32),
+                use_cache=True,
+                attn_state=hist,
+                attn_padding_state=pad,
+            )
             hist, pad = m["attn_state"], m["attn_padding_state"]
     assert hist.shape[1] == 4
-    assert torch.allclose(hist[:, 0], first_token.squeeze(1)), \
-        "attention sink token was evicted!"
+    assert torch.allclose(
+        hist[:, 0], first_token.squeeze(1)
+    ), "attention sink token was evicted!"
     assert pad.shape[1] == 4
     print("15. attention-sink anchoring in window trim OK")
 
@@ -2410,15 +2566,14 @@ def run_self_test() -> None:
     calib17 = torch.randn(6, 32)
     lin17 = nn.Linear(32, 4)
     f_exact = build_empirical_fisher_diagonals(lin17, calib17)
-    f_micro = build_empirical_fisher_diagonals(lin17, calib17,
-                                               micro_batch_size=3)
+    f_micro = build_empirical_fisher_diagonals(lin17, calib17, micro_batch_size=3)
     assert set(f_exact) == set(f_micro)
     assert all(torch.isfinite(v).all() for v in f_micro.values())
     # rigorous path is exact per-sample E[g^2]: recompute manually
     manual = {n: torch.zeros_like(p) for n, p in lin17.named_parameters()}
     for i in range(6):
         lin17.zero_grad()
-        out = lin17(calib17[i:i + 1])
+        out = lin17(calib17[i : i + 1])
         loss = F.cross_entropy(out, out.detach().argmax(-1))
         loss.backward()
         for n, p in lin17.named_parameters():
@@ -2429,9 +2584,11 @@ def run_self_test() -> None:
 
     # 18. Scan dispatch registry: custom backend invoked, bad name raises.
     calls18 = {"n": 0}
+
     def _spy_backend(*args):
         calls18["n"] += 1
         return _selective_scan_impl(*args)
+
     register_scan_backend("spy", _spy_backend)
     os.environ["DAPH_SCAN_BACKEND"] = "spy"
     try:
@@ -2451,7 +2608,7 @@ def run_self_test() -> None:
     # 19. TIES v2 pure sign-majority: a heavy-magnitude outlier expert cannot
     # overturn a majority of weak-magnitude experts of the opposite sign.
     majority_vectors = [
-        {"weight": torch.tensor([10.0])},   # heavy outlier, positive
+        {"weight": torch.tensor([10.0])},  # heavy outlier, positive
         {"weight": torch.tensor([-1.0])},
         {"weight": torch.tensor([-1.0])},
     ]
@@ -2468,8 +2625,12 @@ def run_self_test() -> None:
 
     # 20. DARE preprocessing rescale_deltas option
     task_vecs20 = [{"w": torch.ones(100)}]
-    proc_unscaled, _ = apply_dare_preprocessing(task_vecs20, dare_base_p=0.25, rescale_deltas=False)
-    proc_scaled, _ = apply_dare_preprocessing(task_vecs20, dare_base_p=0.25, rescale_deltas=True)
+    proc_unscaled, _ = apply_dare_preprocessing(
+        task_vecs20, dare_base_p=0.25, rescale_deltas=False
+    )
+    proc_scaled, _ = apply_dare_preprocessing(
+        task_vecs20, dare_base_p=0.25, rescale_deltas=True
+    )
     # Unscaled non-zero values stay 1.0; scaled non-zero values become ~1.33
     nonzero_unscaled = proc_unscaled[0]["w"][proc_unscaled[0]["w"] != 0]
     nonzero_scaled = proc_scaled[0]["w"][proc_scaled[0]["w"] != 0]
@@ -2485,13 +2646,17 @@ def run_self_test() -> None:
     print("21. hardened SSM parameter matcher & policy fallback OK")
 
     # 22. KV cache trimming attention sink position ID tracking
-    cfg22 = DAPHConfig(hidden_size=32, num_attention_heads=2, attn_window=4, attn_sink_tokens=1)
+    cfg22 = DAPHConfig(
+        hidden_size=32, num_attention_heads=2, attn_window=4, attn_sink_tokens=1
+    )
     layer22 = DAPHHybridDecoderLayer(cfg22)
     x22 = torch.randn(1, 1, 32)
     mstate22 = None
     astate22 = torch.randn(1, 5, 32)  # history length 5 > window 4
     apadd22 = torch.zeros(1, 5, dtype=torch.bool)
-    _, meta22 = layer22(x22, use_cache=True, attn_state=astate22, attn_padding_state=apadd22)
+    _, meta22 = layer22(
+        x22, use_cache=True, attn_state=astate22, attn_padding_state=apadd22
+    )
     # Total pos = 6 (5 history + 1 current); sink = 1, window = 4 -> pos ids = [0, 3, 4, 5]
     assert "attn_position_ids" in meta22
     assert meta22["attn_position_ids"].squeeze(0).tolist() == [0, 3, 4, 5]

@@ -22,13 +22,15 @@ This script:
 import copy
 import os
 import sys
+
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Ensure current directory is in path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from daph_hybrid_exfusion_v2_3 import merge_expert_family
+
 
 def generate_sample(model, tokenizer, prompt, max_new_tokens=30):
     inputs = tokenizer(prompt, return_tensors="pt")
@@ -42,6 +44,7 @@ def generate_sample(model, tokenizer, prompt, max_new_tokens=30):
             pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
         )
     return tokenizer.decode(outputs[0], skip_special_tokens=True)
+
 
 def main():
     print("=" * 80)
@@ -74,7 +77,9 @@ def main():
 
     print("\n" + "=" * 80)
     print("2. EXECUTING DAPH EXFUSION MODEL MERGING PIPELINE")
-    print("   (DARE Preprocessing -> TIES v2 Sign Election -> Fisher Diagonal Weighting)")
+    print(
+        "   (DARE Preprocessing -> TIES v2 Sign Election -> Fisher Diagonal Weighting)"
+    )
     print("=" * 80)
 
     # Prepare target model container (clone of base model)
@@ -107,16 +112,27 @@ def main():
         },
     )
 
-    print(f"[✓] ExFusion Merging Complete. Applied merged deltas across {len(merged_deltas)} parameter tensors.")
+    print(
+        f"[✓] ExFusion Merging Complete. Applied merged deltas across {len(merged_deltas)} parameter tensors."
+    )
 
     print("\n" + "=" * 80)
     print("3. GENERATION COMPARISON ACROSS EXPERTS VS. UNIFIED MERGED MODEL")
     print("=" * 80)
 
     test_prompts = [
-        ("Email / Business Writing", "Dear Team,\nI am writing to share an update regarding"),
-        ("Art / Stable Diffusion Prompt", "A highly detailed digital painting of a futuristic city with"),
-        ("Psychology & Dialogue", "In psychological terms, emotional resilience is defined as"),
+        (
+            "Email / Business Writing",
+            "Dear Team,\nI am writing to share an update regarding",
+        ),
+        (
+            "Art / Stable Diffusion Prompt",
+            "A highly detailed digital painting of a futuristic city with",
+        ),
+        (
+            "Psychology & Dialogue",
+            "In psychological terms, emotional resilience is defined as",
+        ),
     ]
 
     for category, prompt in test_prompts:
@@ -126,23 +142,41 @@ def main():
         print(f"{'-'*70}")
 
         print("\n -> Base Model (distilgpt2):")
-        print("    " + generate_sample(base_model, tokenizer, prompt).replace("\n", "\n    "))
+        print(
+            "    "
+            + generate_sample(base_model, tokenizer, prompt).replace("\n", "\n    ")
+        )
 
         print("\n -> Expert 1 (Email Gen):")
-        print("    " + generate_sample(experts[0], tokenizer, prompt).replace("\n", "\n    "))
+        print(
+            "    "
+            + generate_sample(experts[0], tokenizer, prompt).replace("\n", "\n    ")
+        )
 
         print("\n -> Expert 2 (Stable Diffusion Art):")
-        print("    " + generate_sample(experts[1], tokenizer, prompt).replace("\n", "\n    "))
+        print(
+            "    "
+            + generate_sample(experts[1], tokenizer, prompt).replace("\n", "\n    ")
+        )
 
         print("\n -> Expert 3 (Psychology & Dialogue):")
-        print("    " + generate_sample(experts[2], tokenizer, prompt).replace("\n", "\n    "))
+        print(
+            "    "
+            + generate_sample(experts[2], tokenizer, prompt).replace("\n", "\n    ")
+        )
 
         print("\n -> UNIFIED MERGED MODEL (DAPH ExFusion Merged):")
-        print("    " + generate_sample(merged_model, tokenizer, prompt).replace("\n", "\n    "))
+        print(
+            "    "
+            + generate_sample(merged_model, tokenizer, prompt).replace("\n", "\n    ")
+        )
 
     print("\n" + "=" * 80)
-    print("SUCCESS: 3 Hugging Face Models Downloaded & Merged via DAPH ExFusion Pipeline!")
+    print(
+        "SUCCESS: 3 Hugging Face Models Downloaded & Merged via DAPH ExFusion Pipeline!"
+    )
     print("=" * 80)
+
 
 if __name__ == "__main__":
     main()
