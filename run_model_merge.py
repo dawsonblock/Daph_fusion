@@ -84,15 +84,25 @@ def main():
     # Define memory bank weights for 3 experts
     memory_bank_weights = torch.tensor([1.0, 1.0, 1.0])
 
+    # Build empirical calibration batch for Empirical Fisher Diagonal Weighting
+    calib_samples = [
+        "Dear Team, I am writing to share an update regarding the project.",
+        "A highly detailed digital painting of a futuristic city, 8k, trending on artstation.",
+        "In psychological terms, emotional resilience is defined as the capacity to adapt.",
+    ]
+    calibration_batch = tokenizer(calib_samples, return_tensors="pt", padding=True)
+
     print("\n[+] Merging expert family deltas into target model container...")
     merged_deltas = merge_expert_family(
         experts=experts,
         base_model=base_model,
         memory_bank_weights=memory_bank_weights,
+        calibration_batch=calibration_batch,
         apply_to=merged_model,
+        scale=0.35,
         policies={
-            "dare_base_p": 0.20,
-            "ties_trim_ratio": 0.20,
+            "dare_base_p": 0.25,
+            "ties_trim_ratio": 0.25,
             "ties_fisher_blend": 0.50,
         },
     )
