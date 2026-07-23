@@ -85,7 +85,6 @@ from torch import Tensor
 # =============================================================================
 
 
-
 class MergeMode(str, Enum):
     PARAMETER_AVERAGE = "parameter_average"
     TASK_ARITHMETIC = "task_arithmetic"
@@ -899,18 +898,25 @@ try:
         d_skip: Tensor,
         h_init: Tensor,
     ) -> Tuple[Tensor, Tensor]:
+        # Dimension alignment: mamba_ssm expects [B, D, L]
         u = xin.transpose(1, 2).contiguous()
         delta = dt.transpose(1, 2).contiguous()
         b = b_matrix.transpose(1, 2).contiguous()
         c = c_matrix.transpose(1, 2).contiguous()
 
+        # Ensure floating-point precision compatibility: the fused kernel only
+        # supports fp16/bf16 activations with fp32 state matrices.
+        orig_dtype = xin.dtype
+        if orig_dtype not in (torch.float16, torch.bfloat16):
+            u, delta, b, c = u.half(), delta.half(), b.half(), c.half()
+
         out = mamba_ssm_ops.selective_scan_fn(
             u,
             delta,
-            a_matrix,
+            a_matrix.float(),
             b,
             c,
-            d_skip,
+            d_skip.float(),
             z=None,
             delta_bias=None,
             delta_softplus=False,
@@ -923,7 +929,7 @@ try:
             scan_out = out
             last_state = h_init
 
-        y = scan_out.transpose(1, 2).contiguous()
+        y = scan_out.transpose(1, 2).contiguous().to(orig_dtype)
         return y, last_state
 
     register_scan_backend("triton", _triton_scan_adapter)

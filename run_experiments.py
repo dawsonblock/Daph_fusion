@@ -3,11 +3,13 @@
 DAPH ExFusion Quantitative Experiment Suite & Rigorous Evaluation.
 
 This script executes a comprehensive quantitative evaluation of the ExFusion model merging pipeline:
-1. Prepares 150 calibration examples/domain and 150 completely held-out evaluation examples/domain across 3 domains:
-   - Email / Business Writing
-   - Art / Stable Diffusion Prompts
-   - Psychology & Dialogue
-2. Measures baseline performance: Base DistilGPT2 & Individual Experts on held-out NLL/Perplexity.
+1. Prepares isolated qualification (30/domain), calibration (150/domain), and completely held-out
+   evaluation (150/domain) corpora across 3 domains:
+   - Math / Reasoning
+   - Planning / Sequential Strategy
+   - Coding / Software Engineering
+2. Enforces the Phase 1 fail-closed expert qualification preflight gate (I_i >= 0.05) before merging.
+3. Measures baseline performance: Base DistilGPT2 & Individual Experts on held-out NLL/Perplexity.
 3. Measures task vector interference explicitly: Cosine similarities, sign conflict ratios, norms, and layerwise norm ratios.
 4. Executes a full lambda scale sweep (0.0 to 1.0) and baseline comparison:
    - Task Arithmetic
@@ -40,14 +42,22 @@ from daph_hybrid_exfusion_v2_3 import (
     extract_task_vectors,
     merge_expert_family,
 )
+from experiments.qualification import (
+    ExpertQualification,
+    ExpertQualificationPipeline,
+    InvalidExperiment,
+)
 
 # =============================================================================
-# 1. DOMAIN DATASET PREPARATION (CALIBRATION vs. HELD-OUT EVALUATION)
+# 1. DOMAIN DATASET PREPARATION (QUALIFICATION vs. CALIBRATION vs. HELD-OUT EVAL)
 # =============================================================================
 
 
-def build_datasets() -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
-    """Builds calibration and held-out evaluation corpora (150 samples/domain each)."""
+def build_datasets() -> (
+    Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]
+):
+    """Builds isolated qualification (30/domain), calibration (150/domain), and
+    held-out evaluation (150/domain) corpora with disjoint generator ranges."""
 
     # 1. Math / Reasoning Domain
     math_calib = [
@@ -146,6 +156,30 @@ def build_datasets() -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         ]
     )
 
+    # Qualification split (disjoint generator ranges from calibration & evaluation)
+    math_qual = [
+        f"Compute the integer product {a} * {b} = {a * b} and verify it is divisible by {d}."
+        for a in range(11, 16)
+        for b in range(11, 14)
+        for d in range(2, 4)
+    ]
+    plan_qual = [
+        f"Contingency rollback plan {p}: checkpoint state {c} restored before executing recovery step {s}."
+        for p in range(7, 12)
+        for c in range(7, 10)
+        for s in range(7, 9)
+    ]
+    code_qual = [
+        f"def regression_test_case_{i}(fixture) -> None:\n    response = fixture.client.get('/health')\n    assert response.status_code == 200"
+        for i in range(100, 130)
+    ]
+
+    qualification_data = {
+        "math": math_qual[:30],
+        "planning": plan_qual[:30],
+        "coding": code_qual[:30],
+    }
+
     calibration_data = {
         "math": math_calib[:150],
         "planning": plan_calib[:150],
@@ -158,7 +192,62 @@ def build_datasets() -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         "coding": code_eval[:150],
     }
 
-    return calibration_data, evaluation_data
+    return qualification_data, calibration_data, evaluation_data
+
+
+# =============================================================================
+# 1b. PHASE 1 FAIL-CLOSED EXPERT QUALIFICATION PREFLIGHT GATE
+# =============================================================================
+
+
+def enforce_preflight_qualification(
+    base_model: nn.Module,
+    experts: List[nn.Module],
+    expert_metadata: List[Dict[str, str]],
+    qualification_data: Dict[str, List[str]],
+    tokenizer: Any,
+    device: str,
+) -> List[ExpertQualification]:
+    """Runs the Phase 1 preflight qualification gate before any merge sweep.
+
+    Fail-closed by default: raises InvalidExperiment when any candidate expert
+    fails the relative-improvement threshold I_i >= 0.05. Set the environment
+    variable DAPH_ALLOW_UNQUALIFIED_EXPERTS=1 to downgrade the hard failure to
+    a diagnostic warning (retention metrics are then diagnostic only).
+    """
+    pipeline = ExpertQualificationPipeline(
+        base_model, tokenizer, device=device, min_expert_improvement=0.05
+    )
+    qualifications: List[ExpertQualification] = []
+
+    for meta, expert_model in zip(expert_metadata, experts):
+        q = pipeline.qualify_expert(
+            expert_name=meta["name"],
+            expert_revision=meta["revision"],
+            expert_model=expert_model,
+            domain=meta["domain"],
+            qualification_texts=qualification_data[meta["domain"]],
+        )
+        qualifications.append(q)
+        print(
+            f"[Qualification] {q.expert_name} ({q.domain}): "
+            f"Rel Gain = {q.relative_improvement:.4f} | Passed = {q.passed}"
+        )
+
+    try:
+        # Fail closed if any candidate expert fails qualification
+        pipeline.validate_preflight(qualifications)
+        print("[✓] Preflight qualification gate PASSED: all experts qualified.")
+    except InvalidExperiment as exc:
+        if os.environ.get("DAPH_ALLOW_UNQUALIFIED_EXPERTS") == "1":
+            print(f"[!] WARNING (fail-open override): {exc}")
+            print(
+                "[!] Proceeding because DAPH_ALLOW_UNQUALIFIED_EXPERTS=1; "
+                "retention metrics involving unqualified experts are diagnostic only."
+            )
+        else:
+            raise
+    return qualifications
 
 
 # =============================================================================
@@ -315,9 +404,23 @@ def run_experiments():
         AutoModelForCausalLM.from_pretrained(eid).to(device) for eid in expert_ids
     ]
 
-    calib_data, eval_data = build_datasets()
+    qual_data, calib_data, eval_data = build_datasets()
     print(
-        f"[✓] Created Calibration (150/domain) and Held-Out Evaluation (150/domain) Corpora."
+        f"[✓] Created Qualification (30/domain), Calibration (150/domain), and "
+        f"Held-Out Evaluation (150/domain) Corpora."
+    )
+
+    # 0. Phase 1 Fail-Closed Expert Qualification Preflight Gate
+    print("\n" + "-" * 70)
+    print("0. PREFLIGHT EXPERT QUALIFICATION GATE (I_i >= 0.05, FAIL-CLOSED)")
+    print("-" * 70)
+    expert_metadata = [
+        {"name": expert_ids[0], "revision": "main", "domain": "math"},
+        {"name": expert_ids[1], "revision": "main", "domain": "planning"},
+        {"name": expert_ids[2], "revision": "main", "domain": "coding"},
+    ]
+    enforce_preflight_qualification(
+        base_model, experts, expert_metadata, qual_data, tokenizer, device
     )
 
     # 1. Compute Base Model & Expert Benchmarks
