@@ -1,12 +1,14 @@
-from dataclasses import dataclass
-from enum import Enum
 import json
 import os
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 import torch
 import torch.nn as nn
-from research_metrics import compute_expert_advantage, compute_domain_nll
+
+from research_metrics import compute_domain_nll, compute_expert_advantage
 
 
 class QualificationStatus(str, Enum):
