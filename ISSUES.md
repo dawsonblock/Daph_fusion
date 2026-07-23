@@ -8,37 +8,37 @@ This document tracks identified open issues, strategic enhancement requests, and
 
 ### Issue 1: Asymmetric Hard-Routing Compute Optimization (Sparse Mamba/Attention Dispatch)
 
-- **Status**: Open
+- **Status**: Resolved (v2.4 upgrade pass)
 - **Priority**: High | **Effort**: High
 - **Category**: Performance / Sparse Dispatch
 - **Description**:
-  For pointwise paths (`Trans-ExFusion`, `CheapPath`), token-level hard routing uses sparse gather/scatter. However, sequence-dependent paths (`MultiheadAttention`, `MemoryBankExFusionMamba`) currently execute dense linear projections across the entire sequence. Setting $\text{dt}=0$ freezes SSM state updates, but linear projections and memory bandwidth are still consumed for non-routed tokens.
-- **Proposed Solution**:
-  Implement sparse token dispatching or fused masked projection wrappers for non-routed sequence tokens during hard-routing passes.
+  For pointwise paths (`Trans-ExFusion`, `CheapPath`), token-level hard routing uses sparse gather/scatter. However, sequence-dependent paths (`MultiheadAttention`, `MemoryBankExFusionMamba`) previously executed dense linear projections across the entire sequence. Setting $\text{dt}=0$ freezes SSM state updates, but linear projections and memory bandwidth were still consumed for non-routed tokens.
+- **Resolution**:
+  `SparseSequenceDispatch.gather_active_tokens` / `scatter_active_tokens` now wrap the Mamba sequence path inside `DAPHHybridDecoderLayer._path_outputs`: during non-cached hard-routing passes, only routed tokens are gathered into a contiguous batch before the SSM projections execute, and outputs are scattered back to `[B, L, H]`.
 
 ---
 
 ### Issue 2: Native Fused Triton Kernel Integration for Mamba Selective Scan
 
-- **Status**: Open
+- **Status**: Resolved (v2.4 upgrade pass)
 - **Priority**: Medium | **Effort**: Medium
 - **Category**: GPU Kernel Acceleration
 - **Description**:
   The default PyTorch scan fallback executes sequential loops in Python when native Triton/CUDA scan binaries are unavailable.
-- **Proposed Solution**:
-  Register native C++/Triton `mamba_ssm.ops.selective_scan_fn` bindings via `register_scan_backend("triton", ...)` for high-throughput production GPU environments.
+- **Resolution**:
+  `_triton_scan_adapter` auto-registers `mamba_ssm.ops.selective_scan_fn` via `register_scan_backend("triton", ...)` when `mamba_ssm` is installed, and is now hardened with automatic mixed-precision handling: activations are cast to fp16 when needed, state matrices (`A`, `D`) are forced to fp32, and outputs are cast back to the original dtype.
 
 ---
 
 ### Issue 3: Memory-Mapped & Offloaded Fisher Information Matrix Diagonal Computation
 
-- **Status**: Open
+- **Status**: Resolved (v2.4 upgrade pass)
 - **Priority**: Medium | **Effort**: High
 - **Category**: Infrastructure / Model Merging
 - **Description**:
   Calculating and accumulating empirical Fisher diagonals for 70B+ parameter models on GPU/RAM can cause memory pressure.
-- **Proposed Solution**:
-  Implement disk-backed memory mapping (`torch.mmap`) and chunked offloaded parameter buffers during empirical Fisher diagonal computation.
+- **Resolution**:
+  `build_empirical_fisher_diagonals` supports `offload_to_cpu`, and `daph_exfusion/geometry/curvature.py` now provides `build_empirical_fisher_diagonals_offloaded(..., use_mmap=True)` which accumulates squared gradients in disk-backed shared memory-mapped float32 buffers created with `torch.from_file`, verified equivalent to in-RAM accumulation by regression test.
 
 ---
 

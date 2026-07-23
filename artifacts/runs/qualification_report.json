@@ -1,4 +1,47 @@
 {
-  "status": "PASS",
-  "message": "All source experts validated."
+  "status": "FAIL",
+  "min_expert_improvement": 0.05,
+  "base_model": "distilbert/distilgpt2",
+  "message": "One or more source experts failed the qualification gate.",
+  "experts": [
+    {
+      "expert_name": "postbot/distilgpt2-emailgen",
+      "expert_revision": "main",
+      "domain": "math",
+      "base_nll": 5.644377531828703,
+      "expert_nll": NaN,
+      "relative_improvement": NaN,
+      "architecture_compatible": true,
+      "tokenizer_compatible": true,
+      "state_dict_compatible": true,
+      "passed": false,
+      "rejection_reason": "Relative improvement nan < threshold 0.05."
+    },
+    {
+      "expert_name": "FredZhang7/distilgpt2-stable-diffusion",
+      "expert_revision": "main",
+      "domain": "planning",
+      "base_nll": 7.010715619255515,
+      "expert_nll": 9.493224379595588,
+      "relative_improvement": -0.35410204823051966,
+      "architecture_compatible": true,
+      "tokenizer_compatible": true,
+      "state_dict_compatible": true,
+      "passed": false,
+      "rejection_reason": "Relative improvement -0.3541 < threshold 0.05."
+    },
+    {
+      "expert_name": "misterkilgore/distilgpt2-psy-ita",
+      "expert_revision": "main",
+      "domain": "coding",
+      "base_nll": 4.759620331554878,
+      "expert_nll": 13.861936293191057,
+      "relative_improvement": -1.9124037901280722,
+      "architecture_compatible": true,
+      "tokenizer_compatible": true,
+      "state_dict_compatible": true,
+      "passed": false,
+      "rejection_reason": "Relative improvement -1.9124 < threshold 0.05."
+    }
+  ]
 }
