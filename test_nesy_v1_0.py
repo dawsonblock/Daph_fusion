@@ -13,6 +13,7 @@ from daph_nesy_v1_0 import (
     JSONOutputVerifier,
     NeSyDecoderLayer,
     NeSyMacroRouter,
+    NeSyModel,
     NeSyOutputVerifier,
     SQLOutputVerifier,
     SubwordSequenceBridge,
@@ -318,6 +319,37 @@ def test_11_layer_selective_topology() -> None:
     assert not layer1.is_symbolic_active()
 
 
+def test_12_nesy_model_container() -> None:
+    device = _get_device()
+    cfg = DAPHConfig(
+        hidden_size=32,
+        intermediate_size=64,
+        num_attention_heads=2,
+        state_size=8,
+        num_experts=2,
+        num_paths=5,
+        routing_granularity="token",
+        dropout=0.0,
+    )
+    vocab, hidden = 128, 32
+    lm_head = torch.randn(vocab, hidden, device=device)
+    expert = VectorizedSymbolicExpert(hidden, vocab, lm_head, domain="digit_squaring").to(device)
+
+    model = NeSyModel(cfg, num_layers=3, symbolic_expert=expert).to(device)
+    x = torch.randn(2, 4, 32, device=device)
+    tok = torch.tensor([[43, 7, 8, 35], [7, 8, 9, 10]], device=device)
+
+    # Forward without cache
+    out, states = model(x, token_ids=tok)
+    assert out.shape == x.shape
+    assert len(states) == 0
+
+    # Forward with cache
+    out_cached, states_cached = model(x, token_ids=tok, use_cache=True)
+    assert out_cached.shape == x.shape
+    assert len(states_cached) == 3
+
+
 def main() -> None:
     print("Running DAPH NeSy-MoE v1.1 Extended test suite...")
     test_1_symbolic_priors_mandate_paths()
@@ -342,7 +374,9 @@ def main() -> None:
     print("10. expanded grammar verifiers (JSON, SQL, FSM): OK")
     test_11_layer_selective_topology()
     print("11. layer-selective routing topology: OK")
-    print("\nAll 11 NeSy-MoE v1.1 Extended tests passed (executed live).")
+    test_12_nesy_model_container()
+    print("12. multi-layer NeSyModel container: OK")
+    print("\nAll 12 NeSy-MoE v1.1 Extended tests passed (executed live).")
 
 
 if __name__ == "__main__":

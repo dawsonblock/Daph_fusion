@@ -850,3 +850,72 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
         finally:
             self.macro_router.set_priors(None)
             self._cached_symbolic_out = None
+
+
+# =============================================================================
+# 6. NeSy MODEL CONTAINER (multi-layer stack)
+# =============================================================================
+
+
+class NeSyModel(nn.Module):
+    """Full Multi-Layer Container for DAPH NeSy-MoE Architectures."""
+
+    def __init__(
+        self,
+        config: DAPHConfig,
+        num_layers: int,
+        tokenizer: Optional[Any] = None,
+        symbolic_expert: Optional[VectorizedSymbolicExpert] = None,
+        active_symbolic_layers: Optional[Set[int]] = None,
+    ) -> None:
+        super().__init__()
+        self.config = config
+        self.num_layers = num_layers
+        self.rules_engine = TokenizerBoundRulesEngine(
+            num_paths=config.num_paths, tokenizer=tokenizer
+        )
+
+        self.layers = nn.ModuleList(
+            [
+                NeSyDecoderLayer(
+                    config=config,
+                    rules_engine=self.rules_engine,
+                    symbolic_expert=symbolic_expert,
+                    layer_idx=i,
+                    active_symbolic_layers=active_symbolic_layers,
+                )
+                for i in range(num_layers)
+            ]
+        )
+        self.final_norm = nn.LayerNorm(config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: Tensor,
+        token_ids: Optional[Tensor] = None,
+        past_layer_states: Optional[List[Dict[str, Any]]] = None,
+        use_cache: bool = False,
+        **kwargs: Any,
+    ) -> Tuple[Tensor, List[Dict[str, Any]]]:
+        current_hidden = hidden_states
+        next_layer_states: List[Dict[str, Any]] = []
+
+        for i, layer in enumerate(self.layers):
+            layer_past = (
+                past_layer_states[i]
+                if past_layer_states is not None and i < len(past_layer_states)
+                else {}
+            )
+            current_hidden, layer_meta = layer(
+                current_hidden,
+                token_ids=token_ids,
+                use_cache=use_cache,
+                mamba_state=layer_past.get("mamba_state"),
+                attn_state=layer_past.get("attn_state"),
+                attn_padding_state=layer_past.get("attn_padding_state"),
+                **kwargs,
+            )
+            if use_cache:
+                next_layer_states.append(layer_meta)
+
+        return self.final_norm(current_hidden), next_layer_states

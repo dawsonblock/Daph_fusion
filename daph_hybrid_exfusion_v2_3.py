@@ -407,11 +407,18 @@ def apply_dare_preprocessing(
                 drop_rate *= ssm_drop_reduction
             drop_rate = min(0.95, max(0.0, float(drop_rate)))
 
+            if generator is not None and generator.device.type != delta.device.type:
+                local_generator = torch.Generator(device=delta.device).manual_seed(
+                    generator.initial_seed()
+                )
+            else:
+                local_generator = generator
+
             random_values = torch.rand(
                 delta.shape,
                 device=delta.device,
                 dtype=torch.float32,
-                generator=generator,
+                generator=local_generator,
             )
             keep = random_values >= drop_rate
             scale = (1.0 / max(1.0 - drop_rate, 1e-8)) if rescale_deltas else 1.0
@@ -475,6 +482,10 @@ def difficulty_weighted_ties_merge(
             dim=0,
         )
         elected_sign = torch.sign(vote)
+        zero_ties = (elected_sign == 0)
+        if zero_ties.any():
+            fallback_sign = torch.sign(trimmed[0])
+            elected_sign = torch.where(zero_ties, fallback_sign, elected_sign)
         agrees = (torch.sign(trimmed) == elected_sign.unsqueeze(0)) & (trimmed != 0)
 
         weighted_numerator = torch.zeros_like(trimmed[0])
