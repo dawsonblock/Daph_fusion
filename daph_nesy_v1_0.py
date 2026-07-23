@@ -75,9 +75,10 @@ class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
         self,
         hidden_states: Tensor,
         difficulty_metrics: Optional[Dict[str, Tensor]] = None,
+        symbolic_priors: Optional[Tensor] = None,
     ) -> Tensor:
         logits = super().forward(hidden_states, difficulty_metrics)
-        priors = self._pending_priors
+        priors = symbolic_priors if symbolic_priors is not None else self._pending_priors
         if priors is None:
             return logits
         priors = priors.to(logits.device, logits.dtype)
@@ -152,6 +153,8 @@ class TokenizerBoundRulesEngine:
             self.sql_tokens = set(sql_tokens or {83, 70, 87, 74, 71, 66, 73, 85, 68, 72, 59})
             self.symbolic_tokens = set(symbolic_tokens or {35, 64, 36})
 
+        self._update_tensor_buffers()
+
     @staticmethod
     def _resolve_tokens(tokenizer: Any, characters: List[str]) -> Set[int]:
         resolved: Set[int] = set()
@@ -165,10 +168,25 @@ class TokenizerBoundRulesEngine:
                 resolved.add(idx)
         return resolved
 
+    def _update_tensor_buffers(self) -> None:
+        """Pre-buffers PyTorch tensors for zero-allocation rule evaluation."""
+        def make_buf(s: Set[int]) -> Tensor:
+            if not s:
+                return torch.empty(0, dtype=torch.long, device=self.device)
+            return torch.tensor(sorted(s), dtype=torch.long, device=self.device)
+
+        self._buf_math = make_buf(self.math_operators)
+        self._buf_logical = make_buf(self.logical_operators)
+        self._buf_pad = make_buf(self.padding_tokens)
+        self._buf_json = make_buf(self.json_tokens)
+        self._buf_sql = make_buf(self.sql_tokens)
+        self._buf_sym = make_buf(self.symbolic_tokens)
+
     def to(
         self, device: Union[str, torch.device]
     ) -> "TokenizerBoundRulesEngine":
         self.device = torch.device(device)
+        self._update_tensor_buffers()
         return self
 
     def generate_priors(
@@ -186,18 +204,17 @@ class TokenizerBoundRulesEngine:
         B, L = token_ids.shape
         priors = torch.zeros(B, L, self.num_paths, device=self.device)
 
-        def membership(ids: Set[int]) -> Tensor:
-            if not ids:
+        def membership(buf: Tensor) -> Tensor:
+            if buf.numel() == 0:
                 return torch.zeros(B, L, dtype=torch.bool, device=self.device)
-            ref = torch.tensor(sorted(ids), device=self.device)
-            return (token_ids.unsqueeze(-1) == ref).any(dim=-1)
+            return (token_ids.unsqueeze(-1) == buf).any(dim=-1)
 
-        is_math = membership(self.math_operators)
-        is_pad = membership(self.padding_tokens)
-        is_logic = membership(self.logical_operators) & ~is_math & ~is_pad
-        is_json = membership(self.json_tokens) & ~is_pad & ~is_math
-        is_sql = membership(self.sql_tokens) & ~is_pad
-        is_sym = membership(self.symbolic_tokens) & ~is_pad
+        is_math = membership(self._buf_math)
+        is_pad = membership(self._buf_pad)
+        is_logic = membership(self._buf_logical) & ~is_math & ~is_pad
+        is_json = membership(self._buf_json) & ~is_pad & ~is_math
+        is_sql = membership(self._buf_sql) & ~is_pad
+        is_sym = membership(self._buf_sym) & ~is_pad
 
         forbid_all = torch.full_like(priors, BIAS_FORBID)
         ti = self.expert_indices["transformer"]
@@ -354,6 +371,7 @@ class VectorizedSymbolicExpert(nn.Module):
         token_embeddings_weight: Optional[Tensor] = None,
         solver: Optional[Union[str, Callable[[Tensor], Tensor]]] = None,
         domain: str = "digit_squaring",
+        tokenizer: Optional[Any] = None,
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
@@ -386,6 +404,18 @@ class VectorizedSymbolicExpert(nn.Module):
         else:
             self._solver = _solver_digit_squaring
 
+        self.register_buffer("vocab_map", None, persistent=False)
+        if tokenizer is not None:
+            self.build_subword_vocab_map(tokenizer)
+
+    def build_subword_vocab_map(self, tokenizer: Any) -> Tensor:
+        """Precomputes a GPU-native lookup table mapping subword vocabulary
+        token IDs to their solver-transformed target token IDs."""
+        mapping = torch.arange(self.vocab_size, dtype=torch.long)
+        solved_mapping = self._solver(mapping)
+        self.register_buffer("vocab_map", solved_mapping, persistent=True)
+        return solved_mapping
+
     @staticmethod
     def _default_solver(token_ids: Tensor) -> Tensor:
         return _solver_digit_squaring(token_ids)
@@ -394,7 +424,10 @@ class VectorizedSymbolicExpert(nn.Module):
         logits = self.de_embed(hidden_states)            # [B, L, V]
         probs = F.softmax(logits.float(), dim=-1).to(logits.dtype)
         token_ids = probs.argmax(dim=-1)                 # [B, L]
-        solved_ids = self._solver(token_ids)             # [B, L]
+        if self.vocab_map is not None:
+            solved_ids = self.vocab_map[token_ids]       # Fast GPU subword lookup
+        else:
+            solved_ids = self._solver(token_ids)         # [B, L]
 
         one_hot_solved = F.one_hot(solved_ids, self.vocab_size).to(probs.dtype)
         # Straight-through: forward uses the discrete one-hot; backward
@@ -478,6 +511,17 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
         else:
             self.rules_engine = rules_engine
         self.symbolic_expert = symbolic_expert
+        self._cached_symbolic_out: Optional[Tensor] = None
+
+    def _get_cached_symbolic_out(self, hidden_states: Tensor) -> Tensor:
+        if self._cached_symbolic_out is not None:
+            return self._cached_symbolic_out
+        if self.symbolic_expert is not None:
+            sym_out = self.symbolic_expert(hidden_states)
+        else:
+            sym_out = self.cheap_path(hidden_states)
+        self._cached_symbolic_out = sym_out
+        return sym_out
 
     def _path_outputs(
         self,
@@ -507,10 +551,7 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
             valid_mask=valid_mask,
         )
         if self.SYMBOLIC_PATH in required:
-            if self.symbolic_expert is not None:
-                outputs[self.SYMBOLIC_PATH] = self.symbolic_expert(hidden_states)
-            else:
-                outputs[self.SYMBOLIC_PATH] = self.cheap_path(hidden_states)
+            outputs[self.SYMBOLIC_PATH] = self._get_cached_symbolic_out(hidden_states)
         return outputs, next_mamba_state
 
     def forward(
@@ -527,6 +568,7 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
         symbolic_expert_weight: float = 0.0,
         **kwargs: Any,
     ) -> Tuple[Tensor, Dict[str, Any]]:
+        self._cached_symbolic_out = None
         if symbolic_priors is None and token_ids is not None \
                 and self.rules_engine is not None:
             symbolic_priors = self.rules_engine.generate_priors(token_ids)
@@ -548,32 +590,29 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
                 attn_padding_state=attn_padding_state,
                 **kwargs,
             )
+
+            if self.config.num_paths >= 5 and meta.get("selected_paths") is not None:
+                selected = meta["selected_paths"]
+                if (selected == self.SYMBOLIC_PATH).any():
+                    sym_mask = selected == self.SYMBOLIC_PATH
+                    sym_out = self._get_cached_symbolic_out(hidden_states)
+                    if sym_mask.dim() == 1:
+                        output[sym_mask] = sym_out[sym_mask]
+                    else:
+                        output = torch.where(
+                            sym_mask.unsqueeze(-1),
+                            sym_out,
+                            output,
+                        )
+
+            if self.symbolic_expert is not None and symbolic_expert_weight > 0.0:
+                w = min(1.0, max(0.0, symbolic_expert_weight))
+                expert_out = self._get_cached_symbolic_out(hidden_states)
+                output = (1.0 - w) * output + w * expert_out
+                meta["symbolic_expert_weight"] = w
+            if symbolic_priors is not None:
+                meta["symbolic_priors_active"] = True
+            return output, meta
         finally:
             self.macro_router.set_priors(None)
-
-        if self.config.num_paths >= 5 and meta.get("selected_paths") is not None:
-            selected = meta["selected_paths"]
-            if (selected == self.SYMBOLIC_PATH).any():
-                sym_mask = selected == self.SYMBOLIC_PATH
-                sym_out = (
-                    self.symbolic_expert(hidden_states)
-                    if self.symbolic_expert is not None
-                    else self.cheap_path(hidden_states)
-                )
-                if sym_mask.dim() == 1:
-                    output[sym_mask] = sym_out[sym_mask]
-                else:
-                    output = torch.where(
-                        sym_mask.unsqueeze(-1),
-                        sym_out,
-                        output,
-                    )
-
-        if self.symbolic_expert is not None and symbolic_expert_weight > 0.0:
-            w = min(1.0, max(0.0, symbolic_expert_weight))
-            expert_out = self.symbolic_expert(hidden_states)
-            output = (1.0 - w) * output + w * expert_out
-            meta["symbolic_expert_weight"] = w
-        if symbolic_priors is not None:
-            meta["symbolic_priors_active"] = True
-        return output, meta
+            self._cached_symbolic_out = None
