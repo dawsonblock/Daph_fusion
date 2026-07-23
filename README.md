@@ -6,7 +6,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyTorch Version](https://img.shields.io/badge/pytorch-2.1%2B-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/tests-8%2F8%20passing-brightgreen.svg)]()
+[![Build Status](https://img.shields.io/badge/tests-11%2F11%20passing-brightgreen.svg)]()
 [![Architecture](https://img.shields.io/badge/architecture-5--Path%20NeSy--MoE-purple.svg)](daph_nesy_v1_0.py)
 
 ---
@@ -343,7 +343,8 @@ All NeSy-MoE v1.0 (v1.1 Extended) tests passed (executed live).
 .
 ├── daph_nesy_v1_0.py          # Primary NeSy-MoE v1.1 Extended module
 ├── daph_hybrid_exfusion_v2_3.py # Base DAPH Mamba/Attention Hybrid & Model Merging
-├── test_nesy_v1_0.py          # Live test suite (7 comprehensive test groups)
+├── test_nesy_v1_0.py          # Live test suite (11 comprehensive test groups)
+├── benchmark_nesy.py          # Automated performance & VRAM profiling suite
 ├── run_model.py               # Pretrained Hugging Face model runner & NeSy pipeline
 ├── ISSUES.md                  # Issues tracking & architectural roadmap
 ├── README.md                  # Detailed architecture & API documentation

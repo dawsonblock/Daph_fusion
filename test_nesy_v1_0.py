@@ -7,7 +7,8 @@ from daph_hybrid_exfusion_v2_3 import DAPHConfig
 from daph_nesy_v1_0 import (
     BIAS_FORCE, BIAS_FORBID, SYMBOLIC_PATH,
     NeSyDecoderLayer, NeSyMacroRouter, NeSyOutputVerifier,
-    TokenizerBoundRulesEngine, VectorizedSymbolicExpert,
+    JSONOutputVerifier, SQLOutputVerifier, FSMGrammarVerifier,
+    SubwordSequenceBridge, TokenizerBoundRulesEngine, VectorizedSymbolicExpert,
     register_solver, SOLVER_REGISTRY
 )
 
@@ -202,6 +203,64 @@ def test_8_subword_vocab_map() -> None:
     assert out.shape == h.shape
 
 
+def test_9_subword_sequence_bridge() -> None:
+    device = _get_device()
+    
+    class DummyTokenizer:
+        pad_token_id = 0
+        def decode(self, ids, skip_special_tokens=True):
+            return "2 + 2"
+        def encode(self, text, add_special_tokens=False):
+            return [50, 43, 50]
+
+    bridge = SubwordSequenceBridge(DummyTokenizer(), lambda s: s.replace("+", "*"))
+    tok = torch.tensor([[50, 43, 50]], device=device)
+    res = bridge(tok)
+    assert res.shape == tok.shape
+
+
+def test_10_expanded_grammar_verifiers() -> None:
+    # JSON verifier
+    json_v = JSONOutputVerifier(open_brace=123, close_brace=125, open_bracket=91, close_bracket=93, eos_token=2)
+    dec_json = torch.tensor([[123, 91, 10]])  # unclosed brace and bracket
+    logits = torch.zeros(1, 128)
+    corr = json_v.verify_and_correct_logits(dec_json, logits)
+    assert corr[0, 125].item() == 50.0
+    assert corr[0, 93].item() == 50.0
+    assert corr[0, 2].item() == BIAS_FORBID
+
+    # SQL verifier
+    sql_v = SQLOutputVerifier(select_token=83, from_token=70, semicolon_token=59, eos_token=2)
+    dec_sql = torch.tensor([[83, 10, 20]])  # SELECT without FROM or semicolon
+    corr_sql = sql_v.verify_and_correct_logits(dec_sql, logits)
+    assert corr_sql[0, 70].item() == 30.0
+    assert corr_sql[0, 2].item() == BIAS_FORBID
+
+    # FSM verifier
+    fsm_v = FSMGrammarVerifier(
+        state_transitions={0: {83: 1}},
+        state_allowed_tokens={1: {70, 71}},
+        initial_state=0,
+    )
+    dec_fsm = torch.tensor([[83]])
+    corr_fsm = fsm_v.verify_and_correct_logits(dec_fsm, logits)
+    assert corr_fsm[0, 70].item() == 0.0
+    assert corr_fsm[0, 10].item() == BIAS_FORBID
+
+
+def test_11_layer_selective_topology() -> None:
+    device = _get_device()
+    cfg = DAPHConfig(hidden_size=32, intermediate_size=64, num_attention_heads=2, state_size=8, num_paths=5)
+    
+    # Layer 0: active for symbolic
+    layer0 = NeSyDecoderLayer(cfg, layer_idx=0, active_symbolic_layers={0, 2}).to(device)
+    assert layer0.is_symbolic_active()
+
+    # Layer 1: inactive for symbolic
+    layer1 = NeSyDecoderLayer(cfg, layer_idx=1, active_symbolic_layers={0, 2}).to(device)
+    assert not layer1.is_symbolic_active()
+
+
 def main() -> None:
     print("Running DAPH NeSy-MoE v1.1 Extended test suite...")
     test_1_symbolic_priors_mandate_paths()
@@ -220,12 +279,15 @@ def main() -> None:
     print("7. over-closed bracket guardrail: OK")
     test_8_subword_vocab_map()
     print("8. subword vocabulary mapping: OK")
-    print("\nAll 8 NeSy-MoE v1.1 Extended tests passed (executed live).")
+    test_9_subword_sequence_bridge()
+    print("9. subword sequence bridge: OK")
+    test_10_expanded_grammar_verifiers()
+    print("10. expanded grammar verifiers (JSON, SQL, FSM): OK")
+    test_11_layer_selective_topology()
+    print("11. layer-selective routing topology: OK")
+    print("\nAll 11 NeSy-MoE v1.1 Extended tests passed (executed live).")
 
 
 if __name__ == "__main__":
     main()
-
-
-if __name__ == "__main__":
     main()

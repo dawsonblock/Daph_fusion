@@ -17,18 +17,7 @@ This document tracks identified open issues, strategic enhancement requests, and
 
 ---
 
-### Issue 2: Subword BPE/SentencePiece Token Bridge for Domain Solvers
-* **Status**: Open
-* **Priority**: High | **Effort**: Medium
-* **Category**: System 2 Reasoning / Tokenization
-* **Description**:
-  Built-in domain solvers operate on character byte/ASCII representations (`'0'`–`'9'`). Modern subword tokenizers (BPE, SentencePiece) chunk numbers or code tokens into multi-character subwords. While single-token subword vocabulary mapping is precomputed in `VectorizedSymbolicExpert.build_subword_vocab_map()`, multi-token subword expressions require a subword sequence bridge.
-* **Proposed Solution**:
-  Extend `VectorizedSymbolicExpert` with a `SubwordSequenceBridge` that decodes multi-token subword spans into string representations, runs domain solvers, and re-encodes back into discrete token IDs before STE re-embedding.
-
----
-
-### Issue 3: Native Fused Triton Kernel Integration for Mamba Selective Scan
+### Issue 2: Native Fused Triton Kernel Integration for Mamba Selective Scan
 * **Status**: Open
 * **Priority**: Medium | **Effort**: Medium
 * **Category**: GPU Kernel Acceleration
@@ -39,18 +28,7 @@ This document tracks identified open issues, strategic enhancement requests, and
 
 ---
 
-### Issue 4: Multi-Layer Macro-Routing Topology & Expert Layer Parallelism
-* **Status**: Open
-* **Priority**: Medium | **Effort**: High
-* **Category**: Architecture / Scalability
-* **Description**:
-  Evaluating symbolic experts across all layers in deep stacks (e.g. 24 or 32 layers) accumulates compute overhead.
-* **Proposed Solution**:
-  Assign symbolic experts to strategic intermediate or deep reasoning layers while shallow layers handle fast Mamba-2 SSM context pre-processing. Add PyTorch Tensor Parallelism (`tp`) or Expert Parallelism (`ep`) for multi-GPU scaling.
-
----
-
-### Issue 5: Memory-Mapped & Offloaded Fisher Information Matrix Diagonal Computation
+### Issue 3: Memory-Mapped & Offloaded Fisher Information Matrix Diagonal Computation
 * **Status**: Open
 * **Priority**: Medium | **Effort**: High
 * **Category**: Infrastructure / Model Merging
@@ -61,34 +39,16 @@ This document tracks identified open issues, strategic enhancement requests, and
 
 ---
 
-### Issue 6: Multi-Token Output Verifier & Grammar Logit Masking Expansion
-* **Status**: Open
-* **Priority**: Medium | **Effort**: Medium
-* **Category**: System 2 Guardrails
-* **Description**:
-  `NeSyOutputVerifier` currently enforces balanced brackets. Extending guardrails to complex structured formats (JSON schema, SQL syntax, Python AST) will prevent syntax errors at generation time.
-* **Proposed Solution**:
-  Extend `NeSyOutputVerifier` with stateful FSM (Finite State Machine) logit masks for JSON schemas, SQL query syntax, and Python AST grammars.
+## 🛠 Completed Issues & Features (v1.1 Extended)
 
----
-
-### Issue 7: Automated Performance Benchmarking & VRAM Profiling Suite
-* **Status**: Open
-* **Priority**: Low | **Effort**: Medium
-* **Category**: Testing / Benchmarking
-* **Description**:
-  Comprehensive throughput and memory benchmarks across batch sizes $B \in \{1, 8, 32\}$ and sequence lengths $L \in \{512, 2048, 8192\}$ are needed.
-* **Proposed Solution**:
-  Create `benchmark_nesy.py` to measure tokens/sec throughput, latency, and peak VRAM allocation across 5-path hard vs. soft macro-routing configurations.
-
----
-
-## 🛠 Completed Issues & Fixes (v1.1 Extended)
-
+- [x] **[Feature] Subword Sequence Bridge for Multi-Token Solvers**: Implemented `SubwordSequenceBridge` in `daph_nesy_v1_0.py` to handle multi-token subword string decoding, string-level domain solvers, and re-encoding.
+- [x] **[Feature] Expanded Grammar Output Verifiers**: Added `JSONOutputVerifier`, `SQLOutputVerifier`, and `FSMGrammarVerifier` in `daph_nesy_v1_0.py` for structured logit masking during decoding.
+- [x] **[Feature] Multi-Layer Selective Routing Topology**: Added `layer_idx` and `active_symbolic_layers` support in `NeSyDecoderLayer` to bypass symbolic overhead on inactive layers.
+- [x] **[Feature] Automated Performance Benchmarking & VRAM Profiling Suite**: Created `benchmark_nesy.py` to profile latency, throughput (tokens/sec), and peak VRAM allocation.
 - [x] **[Fix] DARE Pre-scaling Double-Compensation Bug**: Added `rescale_deltas=False` option to `apply_dare_preprocessing` to prevent double-scaling expert deltas during normalized weighted merges.
 - [x] **[Fix] Hardened SSM Parameter Identification**: Updated `is_ssm_core_param` fallback policies and guarded `D` suffix matches to Mamba/SSM module names.
 - [x] **[Fix] Attention Sink Positional Index Tracking**: Added `meta["attn_position_ids"]` in `DAPHHybridDecoderLayer.forward` to preserve spatial position IDs during KV cache trimming.
 - [x] **[Perf] Duplicate Symbolic Expert Forward Pass Elimination**: Added `_get_cached_symbolic_out()` in `NeSyDecoderLayer` to prevent redundant expert execution.
 - [x] **[Perf] Pre-buffered Token Rule Tensors**: Added `_update_tensor_buffers()` in `TokenizerBoundRulesEngine` for zero-allocation rule evaluation.
 - [x] **[Feature] GPU-Native Subword Vocabulary Lookup**: Implemented `build_subword_vocab_map()` in `VectorizedSymbolicExpert`.
-- [x] **[Refactor] Pytest Auto-Discovery**: Refactored `test_nesy_v1_0.py` into 8 auto-discovered Pytest functions.
+- [x] **[Refactor] Pytest Auto-Discovery**: Refactored `test_nesy_v1_0.py` into 11 auto-discovered Pytest functions.

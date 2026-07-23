@@ -260,8 +260,52 @@ class TokenizerBoundRulesEngine:
 
 
 # =============================================================================
-# 3. VECTORIZED SYMBOLIC EXPERT & DOMAIN SOLVERS
+# 3. VECTORIZED SYMBOLIC EXPERT, SUBWORD BRIDGES & DOMAIN SOLVERS
 # =============================================================================
+
+class SubwordSequenceBridge:
+    """Bridge for multi-token subword token sequences (BPE, SentencePiece, WordPiece).
+
+    Decodes multi-token subword spans into text strings, applies string-level
+    symbolic domain solvers (math, logic, SAT, AST), and re-encodes back to
+    discrete token ID tensors for STE re-embedding.
+    """
+
+    def __init__(
+        self,
+        tokenizer: Any,
+        string_solver: Callable[[str], str],
+        max_length: Optional[int] = None,
+    ) -> None:
+        self.tokenizer = tokenizer
+        self.string_solver = string_solver
+        self.max_length = max_length
+
+    def __call__(self, token_ids: Tensor) -> Tensor:
+        device = token_ids.device
+        batch_size, seq_len = token_ids.shape
+        solved_ids_list: List[List[int]] = []
+
+        for b in range(batch_size):
+            row_ids = token_ids[b].tolist()
+            try:
+                decoded_text = self.tokenizer.decode(row_ids, skip_special_tokens=True)
+                solved_text = self.string_solver(decoded_text)
+                re_encoded = self.tokenizer.encode(
+                    solved_text, add_special_tokens=False
+                )
+            except Exception:
+                re_encoded = row_ids
+
+            # Truncate or pad to sequence length L
+            if len(re_encoded) > seq_len:
+                re_encoded = re_encoded[:seq_len]
+            elif len(re_encoded) < seq_len:
+                pad_id = getattr(self.tokenizer, "pad_token_id", 0) or 0
+                re_encoded = re_encoded + [pad_id] * (seq_len - len(re_encoded))
+            solved_ids_list.append(re_encoded)
+
+        return torch.tensor(solved_ids_list, dtype=torch.long, device=device)
 
 def _solver_digit_squaring(token_ids: Tensor) -> Tensor:
     """Digit squaring mod 10 over ASCII '0'-'9' (48-57), vectorized."""
@@ -372,6 +416,7 @@ class VectorizedSymbolicExpert(nn.Module):
         solver: Optional[Union[str, Callable[[Tensor], Tensor]]] = None,
         domain: str = "digit_squaring",
         tokenizer: Optional[Any] = None,
+        subword_bridge: Optional[SubwordSequenceBridge] = None,
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
@@ -389,6 +434,7 @@ class VectorizedSymbolicExpert(nn.Module):
         self.re_embed.weight.requires_grad_(True)
         self.context_gate = nn.Parameter(torch.tensor(0.1))
         self.layer_norm = nn.LayerNorm(hidden_size)
+        self.subword_bridge = subword_bridge
 
         if callable(solver):
             self._solver = solver
@@ -424,7 +470,9 @@ class VectorizedSymbolicExpert(nn.Module):
         logits = self.de_embed(hidden_states)            # [B, L, V]
         probs = F.softmax(logits.float(), dim=-1).to(logits.dtype)
         token_ids = probs.argmax(dim=-1)                 # [B, L]
-        if self.vocab_map is not None:
+        if self.subword_bridge is not None:
+            solved_ids = self.subword_bridge(token_ids)
+        elif self.vocab_map is not None:
             solved_ids = self.vocab_map[token_ids]       # Fast GPU subword lookup
         else:
             solved_ids = self._solver(token_ids)         # [B, L]
@@ -477,6 +525,119 @@ class NeSyOutputVerifier:
         return corrected
 
 
+class JSONOutputVerifier(NeSyOutputVerifier):
+    """Post-hoc System-2 guardrail enforcing JSON brace {} and bracket [] balance."""
+
+    def __init__(
+        self,
+        open_brace: int = 123,
+        close_brace: int = 125,
+        open_bracket: int = 91,
+        close_bracket: int = 93,
+        eos_token: int = 2,
+        bias: float = 50.0,
+    ) -> None:
+        super().__init__(open_token=open_brace, close_token=close_brace, close_bias=bias)
+        self.open_bracket = open_bracket
+        self.close_bracket = close_bracket
+        self.eos_token = eos_token
+
+    def verify_and_correct_logits(
+        self,
+        decoded_tokens: Tensor,
+        next_token_logits: Tensor,
+    ) -> Tensor:
+        corrected = super().verify_and_correct_logits(decoded_tokens, next_token_logits)
+        open_b = (decoded_tokens == self.open_bracket).sum(dim=1)
+        close_b = (decoded_tokens == self.close_bracket).sum(dim=1)
+        needs_bracket = open_b > close_b
+        forbid_bracket = open_b <= close_b
+        corrected[needs_bracket, self.close_bracket] += self.close_bias
+        corrected[forbid_bracket, self.close_bracket] = BIAS_FORBID
+
+        # Forbid EOS token if JSON braces/brackets are still unclosed
+        open_br = (decoded_tokens == self.open_token).sum(dim=1)
+        close_br = (decoded_tokens == self.close_token).sum(dim=1)
+        unclosed = (open_br > close_br) | (open_b > close_b)
+        corrected[unclosed, self.eos_token] = BIAS_FORBID
+        return corrected
+
+
+class SQLOutputVerifier:
+    """Post-hoc System-2 guardrail enforcing SQL clause structure and semicolon termination."""
+
+    def __init__(
+        self,
+        select_token: int = 83,
+        from_token: int = 70,
+        semicolon_token: int = 59,
+        eos_token: int = 2,
+        clause_bias: float = 30.0,
+    ) -> None:
+        self.select_token = select_token
+        self.from_token = from_token
+        self.semicolon_token = semicolon_token
+        self.eos_token = eos_token
+        self.clause_bias = clause_bias
+
+    def verify_and_correct_logits(
+        self,
+        decoded_tokens: Tensor,
+        next_token_logits: Tensor,
+    ) -> Tensor:
+        corrected = next_token_logits.clone()
+        has_select = (decoded_tokens == self.select_token).any(dim=1)
+        has_from = (decoded_tokens == self.from_token).any(dim=1)
+        has_semi = (decoded_tokens == self.semicolon_token).any(dim=1)
+
+        # SELECT present but missing FROM -> bias FROM keyword
+        needs_from = has_select & ~has_from
+        corrected[needs_from, self.from_token] += self.clause_bias
+
+        # Query in progress without semicolon -> forbid premature EOS
+        incomplete = has_select & ~has_semi
+        corrected[incomplete, self.eos_token] = BIAS_FORBID
+        return corrected
+
+
+class FSMGrammarVerifier:
+    """Finite State Machine (FSM) grammar verifier for dynamic logit masking."""
+
+    def __init__(
+        self,
+        state_transitions: Dict[int, Dict[int, int]],
+        state_allowed_tokens: Dict[int, Set[int]],
+        initial_state: int = 0,
+    ) -> None:
+        self.state_transitions = state_transitions
+        self.state_allowed_tokens = state_allowed_tokens
+        self.initial_state = initial_state
+
+    def verify_and_correct_logits(
+        self,
+        decoded_tokens: Tensor,
+        next_token_logits: Tensor,
+    ) -> Tensor:
+        corrected = next_token_logits.clone()
+        batch_size = decoded_tokens.shape[0]
+
+        for b in range(batch_size):
+            curr_state = self.initial_state
+            for tok in decoded_tokens[b].tolist():
+                if curr_state in self.state_transitions and tok in self.state_transitions[curr_state]:
+                    curr_state = self.state_transitions[curr_state][tok]
+
+            if curr_state in self.state_allowed_tokens:
+                allowed = self.state_allowed_tokens[curr_state]
+                if allowed:
+                    mask = torch.full_like(corrected[b], BIAS_FORBID)
+                    indices = torch.tensor(list(allowed), device=corrected.device, dtype=torch.long)
+                    mask[indices] = corrected[b, indices]
+                    corrected[b] = mask
+
+        return corrected
+
+
 # =============================================================================
 # 5. NeSy DECODER LAYER (non-invasive integration)
 # =============================================================================
@@ -497,6 +658,8 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
         config: DAPHConfig,
         rules_engine: Optional[TokenizerBoundRulesEngine] = None,
         symbolic_expert: Optional[VectorizedSymbolicExpert] = None,
+        layer_idx: Optional[int] = None,
+        active_symbolic_layers: Optional[Set[int]] = None,
     ) -> None:
         super().__init__(config)
         nesy_router = NeSyMacroRouter(
@@ -511,12 +674,19 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
         else:
             self.rules_engine = rules_engine
         self.symbolic_expert = symbolic_expert
+        self.layer_idx = layer_idx
+        self.active_symbolic_layers = active_symbolic_layers
         self._cached_symbolic_out: Optional[Tensor] = None
+
+    def is_symbolic_active(self) -> bool:
+        if self.layer_idx is None or self.active_symbolic_layers is None:
+            return True
+        return self.layer_idx in self.active_symbolic_layers
 
     def _get_cached_symbolic_out(self, hidden_states: Tensor) -> Tensor:
         if self._cached_symbolic_out is not None:
             return self._cached_symbolic_out
-        if self.symbolic_expert is not None:
+        if self.symbolic_expert is not None and self.is_symbolic_active():
             sym_out = self.symbolic_expert(hidden_states)
         else:
             sym_out = self.cheap_path(hidden_states)
