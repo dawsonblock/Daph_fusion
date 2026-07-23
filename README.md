@@ -291,8 +291,9 @@ corrected_logits = verifier.verify_and_correct_logits(generated_ids, next_logits
 
 ---
 
-## 🤖 Pretrained Model Runner (`run_model.py`)
+## 🤖 Pretrained Model & Merging Runners
 
+### 1. Neurosymbolic Integration Runner (`run_model.py`)
 A full end-to-end integration script [run_model.py](run_model.py) is included in the repository. It:
 1. Downloads `distilbert/distilgpt2` from Hugging Face Hub.
 2. Runs standard neural generation on text prompts.
@@ -302,6 +303,22 @@ A full end-to-end integration script [run_model.py](run_model.py) is included in
 Run it via:
 ```bash
 python3 run_model.py
+```
+
+### 2. Multi-Model ExFusion Merging Runner (`run_model_merge.py`)
+An automated multi-expert model merging pipeline runner [run_model_merge.py](run_model_merge.py). It:
+1. Downloads 3 distinct fine-tuned expert models + 1 base model from Hugging Face Hub:
+   - Base: `distilbert/distilgpt2`
+   - Expert 1: `postbot/distilgpt2-emailgen` (Email / Business Writing)
+   - Expert 2: `FredZhang7/distilgpt2-stable-diffusion` (Art / Prompt Generation)
+   - Expert 3: `misterkilgore/distilgpt2-psy-ita` (Psychology & Dialogue)
+2. Executes the DAPH ExFusion Pipeline (`DARE Preprocessing` $\rightarrow$ `TIES v2 Sign Election` $\rightarrow$ `Fisher Diagonal Weighting`).
+3. Applies merged parameter deltas directly to a target model container.
+4. Generates text across all individual experts, the base model, and the unified merged model.
+
+Run it via:
+```bash
+python3 run_model_merge.py
 ```
 
 ---
@@ -346,6 +363,7 @@ All NeSy-MoE v1.0 (v1.1 Extended) tests passed (executed live).
 ├── test_nesy_v1_0.py          # Live test suite (11 comprehensive test groups)
 ├── benchmark_nesy.py          # Automated performance & VRAM profiling suite
 ├── run_model.py               # Pretrained Hugging Face model runner & NeSy pipeline
+├── run_model_merge.py         # Multi-expert Hugging Face model merging runner
 ├── ISSUES.md                  # Issues tracking & architectural roadmap
 ├── README.md                  # Detailed architecture & API documentation
 ├── LICENSE                    # MIT License
