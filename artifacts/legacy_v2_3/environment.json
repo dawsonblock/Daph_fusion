@@ -1,0 +1,10 @@
+{
+  "python_version": "3.12.0",
+  "pytorch_version": "2.10.0",
+  "platform": "macOS-26.2-arm64-arm-64bit",
+  "processor": "arm",
+  "system": "Darwin",
+  "mps_available": true,
+  "cuda_available": false,
+  "commit_sha": "464d8317d7c0bea538ba311add6f522cbb68755d"
+}

@@ -1,0 +1,20 @@
+{
+  "benchmark_nesy.py": "84e4f264de1e15f481b30df48a494367523ea785d749db1c41141ade6a95e24c",
+  "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+  "daph_hybrid_exfusion_v2_3.py": "c5fff39d7f324feaba9b2478df2b76ba9f029c53eb4db9d1e3e58fe626f437d3",
+  "run_model.py": "2d0907e33039d8ff478131cb17bdf88061ec9ac7effc00a067c4f99bca2aa8a8",
+  "README.md": "d297c1ef4dca6ef15357ae7b76efb47ac7399e4941c1423bba43289d6d94ec3f",
+  "test_nesy_v1_0.py": "b487a55281a1d60f6707caa3ab5089fb6a7d36731027d839fabfab61bd396728",
+  "RESULTS.md": "d5b318bb3c9b474fd34eb3ecda9ccce78279f4301eab40cc2df697df18fffdc7",
+  ".gitignore": "08ed3ffd432741cb3d1c056d780fd22b5aeba1c64111bb682acc7f0e42dc8bfa",
+  "ISSUES.md": "e4c0ff15a302c184e98485ac316fc1739287c4bef0490a66ab3da469e7a642b9",
+  "run_model_merge.py": "8768fe834bd519bf83931e368e8a3abe505fcacbeb5460e609bb667604f0b830",
+  "run_experiments.py": "01da95fc3cc5db79c360a7ca0741c61aa030e8d592dd37497df0fa4d71c80dfb",
+  "daph_nesy_v1_0.py": "7727aeeba8aeb93699d925cdf721050b83467f00f15df9cbef5ca39723cd7360",
+  "artifacts/experiment_results.json": "7d9f131fba1928041483ef4b8be29a83b04e14f2a66abaafb570c927b0eaed27",
+  ".trunk/trunk.yaml": "b34786d2846c6ff412e39411a9f6117db3e0b8e82fcb23b8a195a878b9fec872",
+  ".trunk/.gitignore": "a3a6850a4d3873929d6296fb261801a240eaa67247f219894da802b45359fd7e",
+  ".trunk/configs/.isort.cfg": "968e1af82279fb9bb4b6fd697ad2a83763eb6ca524403c42cf1f6f99707de619",
+  ".trunk/configs/ruff.toml": "7d5f27b2681ad76dbd0e5e9ff893f78f8c6ce0ade804de044322300b60e7a0c1",
+  ".trunk/configs/.markdownlint.yaml": "697b0377e423ca0f494859a15e68e4a7d6c7727c2fc4c816f0c8e1b4cad0d2ec"
+}

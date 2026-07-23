@@ -1,0 +1,9 @@
+{
+  "experiment_id": "legacy-v2.3-baseline-sweep",
+  "base_model": "Qwen/Qwen2.5-0.5B",
+  "base_revision": "e963b5f76ee384a2d8e4046607e44a4fa8dfa52b",
+  "expert_domains": ["email", "art", "psychology"],
+  "scale_sweep": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+  "sample_count_per_domain": 150,
+  "seed": 42
+}

@@ -83,6 +83,17 @@ from torch import Tensor
 # 1. CORE POLICY & HELPERS
 # =============================================================================
 
+from enum import Enum
+
+class MergeMode(str, Enum):
+    PARAMETER_AVERAGE = "parameter_average"
+    TASK_ARITHMETIC = "task_arithmetic"
+    WEIGHTED_TASK_ARITHMETIC = "weighted_task_arithmetic"
+    LOGIT_WEIGHTED = "logit_weighted"
+    FULL = "full"
+    WEIGHTED_AVERAGE = "weighted_average"  # Alias for weighted_task_arithmetic
+
+
 DEFAULT_MAMBA_POLICIES: Dict[str, Any] = {
     "ssm_groups": ["A_log", "D", "dt_proj"],
     "proj_groups": [
@@ -2038,28 +2049,52 @@ def merge_expert_family(
 
     task_vectors = extract_task_vectors(experts, base_model)
 
-    # merge_mode="weighted_average": plain weighted average of task vectors,
-    # no DARE drop / TIES trim-elect / Fisher boost. Available because
-    # ExFusion ablations found trimming matched-or-underperformed plain
-    # averaging for co-trained experts.
-    merge_mode = str(policy.get("merge_mode", "full"))
-    if merge_mode == "weighted_average":
+    # merge_mode policy: "full" (DARE->TIES->Fisher), "parameter_average",
+    # "task_arithmetic", "weighted_task_arithmetic" (or "weighted_average"),
+    # or "logit_weighted".
+    merge_mode = str(policy.get("merge_mode", "full")).lower()
+    
+    if merge_mode in (MergeMode.PARAMETER_AVERAGE.value, MergeMode.TASK_ARITHMETIC.value, MergeMode.WEIGHTED_TASK_ARITHMETIC.value, MergeMode.WEIGHTED_AVERAGE.value, MergeMode.LOGIT_WEIGHTED.value):
         names = _validate_homogeneous_task_vectors(task_vectors)
-        merged = {
-            name: sum(
-                weights[i] * task_vectors[i][name] for i in range(len(task_vectors))
-            )
-            for name in names
-        }
+        N = len(task_vectors)
+        
+        if merge_mode == MergeMode.PARAMETER_AVERAGE.value:
+            # Simple unweighted parameter average of task vectors
+            merged = {
+                name: (1.0 / N) * sum(task_vectors[i][name] for i in range(N))
+                for name in names
+            }
+        elif merge_mode == MergeMode.TASK_ARITHMETIC.value:
+            # Direct sum of task vectors (Task Arithmetic)
+            merged = {
+                name: sum(task_vectors[i][name] for i in range(N))
+                for name in names
+            }
+        elif merge_mode in (MergeMode.WEIGHTED_TASK_ARITHMETIC.value, MergeMode.WEIGHTED_AVERAGE.value):
+            # Explicitly weighted task arithmetic using provided coefficients (no softmax)
+            merged = {
+                name: sum(weights[i] * task_vectors[i][name] for i in range(N))
+                for name in names
+            }
+        elif merge_mode == MergeMode.LOGIT_WEIGHTED.value:
+            # Explicit softmax-normalized weights over weight_logits
+            logit_weights = F.softmax(memory_bank_weights, dim=-1)
+            merged = {
+                name: sum(logit_weights[i] * task_vectors[i][name] for i in range(N))
+                for name in names
+            }
+            
         if apply_to is not None:
             _apply_delta_to_module(
                 apply_to, merged, scale=scale, require_full_coverage=True
             )
         return merged
-    if merge_mode != "full":
+        
+    if merge_mode != MergeMode.FULL.value:
         raise ValueError(
             f"Unknown merge_mode '{merge_mode}' "
-            f"(expected 'full' or 'weighted_average')"
+            f"(expected 'full', 'parameter_average', 'task_arithmetic', "
+            f"'weighted_task_arithmetic', 'logit_weighted', or 'weighted_average')"
         )
     task_vectors, keep_masks = apply_dare_preprocessing(
         task_vectors,
