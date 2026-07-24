@@ -1,0 +1,61 @@
+{
+  "frozen_config": {
+    "release": "v2.6.0-experimental-truth",
+    "config_hash": "c91025e5a4ab464d48d8ea24fc1acc7fdacf4c25fa045eacbad8ce1ef9a3998d",
+    "frozen_at": "2026-07-24T07:08:14.782058+00:00",
+    "config": {
+      "base_model": "distilgpt2",
+      "best_method": "task_arithmetic",
+      "seeds": [
+        11,
+        23,
+        37,
+        51,
+        73
+      ],
+      "domains": [
+        "math",
+        "planning",
+        "coding"
+      ],
+      "merge_scale": 0.5,
+      "merge_hyperparameters": {
+        "dare_drop_rate": 0.1,
+        "ties_trim_fraction": 0.2,
+        "fisher_gamma": 0.5,
+        "ties_sign_mode": "magnitude"
+      },
+      "operator_trace": [
+        "TASK_ARITHMETIC"
+      ],
+      "n_samples_validation": 50
+    },
+    "test_split_used_during_search": false
+  },
+  "best_method": "task_arithmetic",
+  "operator_trace": [
+    "TASK_ARITHMETIC"
+  ],
+  "test_base_nlls": {
+    "math": 4.55453173262884,
+    "planning": 4.574308219498503,
+    "coding": 3.855024633514747
+  },
+  "test_expert_nlls": {
+    "math": 0.8762266272853128,
+    "planning": 0.6221068787717534,
+    "coding": 1.4107576863149578
+  },
+  "test_merged_nlls": {
+    "math": 1.5479871659860585,
+    "planning": 1.3841427009262726,
+    "coding": 2.745259465706929
+  },
+  "test_retention": {
+    "math": 0.8173722626421419,
+    "planning": 0.8071869936630324,
+    "coding": 0.4540278094744077
+  },
+  "test_mean_retention": 0.6928623552598606,
+  "test_worst_retention": 0.4540278094744077
+}

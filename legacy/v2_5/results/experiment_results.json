@@ -1,0 +1,525 @@
+{
+  "base_nlls": {
+    "math": 4.94478518486023,
+    "planning": 4.48669095993042,
+    "coding": 3.817598304748535,
+    "general": 4.408899455070496
+  },
+  "expert_nlls": {
+    "math": 0.9867814636230469,
+    "planning": 0.4772851407527924,
+    "coding": 0.9989542976021767
+  },
+  "seeds": [
+    11,
+    23,
+    37,
+    51,
+    73
+  ],
+  "methods": [
+    "base",
+    "expert_specialists",
+    "task_arithmetic",
+    "mean_merge",
+    "TIES_MAGNITUDE",
+    "TIES_MAJORITY",
+    "FISHER",
+    "TIES_FISHER",
+    "DARE_TIES_FISHER",
+    "weighted_task_arithmetic",
+    "DARE",
+    "DARE_TIES",
+    "AGX_H"
+  ],
+  "all_experts_qualified": true,
+  "all_metrics_valid": true,
+  "official": true,
+  "n_samples_per_domain": 50,
+  "operator_traces": {
+    "task_arithmetic": [
+      "TASK_ARITHMETIC"
+    ],
+    "mean_merge": [
+      "MEAN_MERGE"
+    ],
+    "TIES_MAGNITUDE": [
+      "TIES_MAGNITUDE"
+    ],
+    "TIES_MAJORITY": [
+      "TIES_MAJORITY"
+    ],
+    "FISHER": [
+      "EMPIRICAL_FISHER"
+    ],
+    "TIES_FISHER": [
+      "TIES_MAGNITUDE",
+      "EMPIRICAL_FISHER"
+    ],
+    "DARE_TIES_FISHER": [
+      "DARE",
+      "TIES_MAGNITUDE",
+      "EMPIRICAL_FISHER"
+    ],
+    "weighted_task_arithmetic": [
+      "WEIGHTED_TASK_ARITHMETIC"
+    ],
+    "DARE": [
+      "DARE"
+    ],
+    "DARE_TIES": [
+      "DARE",
+      "TIES_MAGNITUDE"
+    ],
+    "AGX_H": [
+      "DARE",
+      "TIES_MAGNITUDE",
+      "HEURISTIC_ROUTER"
+    ]
+  },
+  "curvature_bank_metadata": {
+    "base_model_hash": "b74f8dd38e195174",
+    "calibration_data_hash": "822ecd7d642039bd",
+    "n_samples": 90,
+    "mode": "exact_per_sample",
+    "dtype": "float32",
+    "experts": [
+      "expert_math",
+      "expert_planning",
+      "expert_coding"
+    ],
+    "param_counts": {
+      "expert_math": 76,
+      "expert_planning": 76,
+      "expert_coding": 76
+    }
+  },
+  "per_seed_results": {
+    "base": [
+      {
+        "seed": 0,
+        "method": "base",
+        "per_domain_nll": {
+          "math": 4.94478518486023,
+          "planning": 4.48669095993042,
+          "coding": 3.817598304748535,
+          "general": 4.408899455070496
+        },
+        "per_domain_retention": {
+          "math": 0.0,
+          "planning": 0.0,
+          "coding": 0.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 0.0,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "expert_specialists": [
+      {
+        "seed": 0,
+        "method": "expert_specialists",
+        "per_domain_nll": {
+          "math": 0.9867814636230469,
+          "planning": 0.4772851407527924,
+          "coding": 0.9989542976021767
+        },
+        "per_domain_retention": {
+          "math": 1.0,
+          "planning": 1.0,
+          "coding": 1.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 0.0,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "task_arithmetic": [
+      {
+        "seed": 0,
+        "method": "task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.7306729018688203,
+          "planning": 1.1919928395748138,
+          "coding": 2.2776388001441954
+        },
+        "per_domain_retention": {
+          "math": 0.8070298840042447,
+          "planning": 0.8251939870110769,
+          "coding": 0.7522110012826098
+        },
+        "base_regression": 0.5571349227210008,
+        "repr_drift": 0.0,
+        "runtime_s": 1.3095769882202148,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "mean_merge": [
+      {
+        "seed": 0,
+        "method": "mean_merge",
+        "per_domain_nll": {
+          "math": 2.0488791632652283,
+          "planning": 1.9667559123039247,
+          "coding": 2.3064281702041627
+        },
+        "per_domain_retention": {
+          "math": 0.7308131150127213,
+          "planning": 0.6353848993207019,
+          "coding": 0.586824167004565
+        },
+        "base_regression": 0.04553810240684305,
+        "repr_drift": 0.0,
+        "runtime_s": 1.6842377185821533,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "TIES_MAGNITUDE": [
+      {
+        "seed": 0,
+        "method": "TIES_MAGNITUDE",
+        "per_domain_nll": {
+          "math": 1.7272531175613404,
+          "planning": 1.332257831096649,
+          "coding": 2.1406647717952727
+        },
+        "per_domain_retention": {
+          "math": 0.8092366713941266,
+          "planning": 0.7946846826780133,
+          "coding": 0.762162928669303
+        },
+        "base_regression": 0.3247237871291071,
+        "repr_drift": 0.0,
+        "runtime_s": 6.350193023681641,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "TIES_MAJORITY": [
+      {
+        "seed": 0,
+        "method": "TIES_MAJORITY",
+        "per_domain_nll": {
+          "math": 1.6976738131046296,
+          "planning": 1.2769226431846619,
+          "coding": 2.4236623775959014
+        },
+        "per_domain_retention": {
+          "math": 0.8166784923753159,
+          "planning": 0.8077522092815801,
+          "coding": 0.6712979424897938
+        },
+        "base_regression": 0.29026644114721734,
+        "repr_drift": 0.0,
+        "runtime_s": 5.200160026550293,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "FISHER": [
+      {
+        "seed": 0,
+        "method": "FISHER",
+        "per_domain_nll": {
+          "math": 2.0488794898986815,
+          "planning": 1.966755895614624,
+          "coding": 2.306427843570709
+        },
+        "per_domain_retention": {
+          "math": 0.7308130216413896,
+          "planning": 0.6353849237940282,
+          "coding": 0.5868243306468564
+        },
+        "base_regression": 0.04553808618384349,
+        "repr_drift": 0.0,
+        "runtime_s": 0.9804151058197021,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "TIES_FISHER": [
+      {
+        "seed": 0,
+        "method": "TIES_FISHER",
+        "per_domain_nll": {
+          "math": 1.7450355505943298,
+          "planning": 1.4862883305549621,
+          "coding": 2.180917600393295
+        },
+        "per_domain_retention": {
+          "math": 0.8052839964801208,
+          "planning": 0.7578205193743205,
+          "coding": 0.7391641143014225
+        },
+        "base_regression": 0.24723424707297947,
+        "repr_drift": 0.0,
+        "runtime_s": 5.71514892578125,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "DARE_TIES_FISHER": [
+      {
+        "seed": 0,
+        "method": "DARE_TIES_FISHER",
+        "per_domain_nll": {
+          "math": 1.765697717666626,
+          "planning": 1.4526098036766053,
+          "coding": 2.2150680470466613
+        },
+        "per_domain_retention": {
+          "math": 0.7997094325864046,
+          "planning": 0.7654333346606027,
+          "coding": 0.7363740463012683
+        },
+        "base_regression": 0.2912102271225231,
+        "repr_drift": 0.0,
+        "runtime_s": 7.419371604919434,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "weighted_task_arithmetic": [
+      {
+        "seed": 0,
+        "method": "weighted_task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.7306729018688203,
+          "planning": 1.1919928395748138,
+          "coding": 2.2776388001441954
+        },
+        "per_domain_retention": {
+          "math": 0.8070298840042447,
+          "planning": 0.8251939870110769,
+          "coding": 0.7522110012826098
+        },
+        "base_regression": 0.5571349227210008,
+        "repr_drift": 0.0,
+        "runtime_s": 0.6662931442260742,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "DARE": [
+      {
+        "seed": 11,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.7560327565670013,
+          "planning": 1.2264748179912568,
+          "coding": 2.266935280561447
+        },
+        "per_domain_retention": {
+          "math": 0.7998466005382414,
+          "planning": 0.8164477969681582,
+          "coding": 0.7524596624868015
+        },
+        "base_regression": 0.5731216699407148,
+        "repr_drift": 0.0,
+        "runtime_s": 1.0824220180511475,
+        "valid": true,
+        "has_per_sample_data": true
+      },
+      {
+        "seed": 23,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.7101844108104707,
+          "planning": 1.2083900415897368,
+          "coding": 2.3074964833259584
+        },
+        "per_domain_retention": {
+          "math": 0.8133526570796722,
+          "planning": 0.8208995492548354,
+          "coding": 0.7457516497575891
+        },
+        "base_regression": 0.5592247046267932,
+        "repr_drift": 0.0,
+        "runtime_s": 1.0240461826324463,
+        "valid": true,
+        "has_per_sample_data": true
+      },
+      {
+        "seed": 37,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.7587570941448212,
+          "planning": 1.197459934949875,
+          "coding": 2.3003730177879333
+        },
+        "per_domain_retention": {
+          "math": 0.8000019335373942,
+          "planning": 0.8240694867485451,
+          "coding": 0.749339957228802
+        },
+        "base_regression": 0.5663188449441514,
+        "repr_drift": 0.0,
+        "runtime_s": 1.7526819705963135,
+        "valid": true,
+        "has_per_sample_data": true
+      },
+      {
+        "seed": 51,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.752610583305359,
+          "planning": 1.1906612348556518,
+          "coding": 2.3045212638378145
+        },
+        "per_domain_retention": {
+          "math": 0.8019605453501646,
+          "planning": 0.8246326659059384,
+          "coding": 0.7552419939481463
+        },
+        "base_regression": 0.5768361225192113,
+        "repr_drift": 0.0,
+        "runtime_s": 1.081402063369751,
+        "valid": true,
+        "has_per_sample_data": true
+      },
+      {
+        "seed": 73,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.7589816439151764,
+          "planning": 1.2003406447172165,
+          "coding": 2.2349969255924225
+        },
+        "per_domain_retention": {
+          "math": 0.7993102940860308,
+          "planning": 0.8229820431086545,
+          "coding": 0.7709933877144777
+        },
+        "base_regression": 0.5563137339530455,
+        "repr_drift": 0.0,
+        "runtime_s": 1.0605719089508057,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "DARE_TIES": [
+      {
+        "seed": 11,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.7480189108848572,
+          "planning": 1.4767913031578064,
+          "coding": 2.2008345997333527
+        },
+        "per_domain_retention": {
+          "math": 0.8040909030735746,
+          "planning": 0.7597950072407003,
+          "coding": 0.7401687616836476
+        },
+        "base_regression": 0.2974927329371085,
+        "repr_drift": 0.0,
+        "runtime_s": 7.0950767993927,
+        "valid": true,
+        "has_per_sample_data": true
+      },
+      {
+        "seed": 23,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.736735268831253,
+          "planning": 1.471681455373764,
+          "coding": 2.212189637422562
+        },
+        "per_domain_retention": {
+          "math": 0.8077601179274442,
+          "planning": 0.7609002927141024,
+          "coding": 0.7348736752983591
+        },
+        "base_regression": 0.29060572246991767,
+        "repr_drift": 0.0,
+        "runtime_s": 6.431565046310425,
+        "valid": true,
+        "has_per_sample_data": true
+      },
+      {
+        "seed": 37,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.7626346039772034,
+          "planning": 1.4610021388530732,
+          "coding": 2.2051434564590453
+        },
+        "per_domain_retention": {
+          "math": 0.8003565794718432,
+          "planning": 0.7635762998583382,
+          "coding": 0.7339518140769787
+        },
+        "base_regression": 0.29736297597930433,
+        "repr_drift": 0.0,
+        "runtime_s": 5.757965803146362,
+        "valid": true,
+        "has_per_sample_data": true
+      },
+      {
+        "seed": 51,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.7629879271984101,
+          "planning": 1.4788107037544251,
+          "coding": 2.1997231101989745
+        },
+        "per_domain_retention": {
+          "math": 0.8009702814844212,
+          "planning": 0.75913094062099,
+          "coding": 0.7460816696339563
+        },
+        "base_regression": 0.29324593020019196,
+        "repr_drift": 0.0,
+        "runtime_s": 5.698188781738281,
+        "valid": true,
+        "has_per_sample_data": true
+      },
+      {
+        "seed": 73,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.780166951417923,
+          "planning": 1.4676692378520966,
+          "coding": 2.153561233282089
+        },
+        "per_domain_retention": {
+          "math": 0.7961534277512627,
+          "planning": 0.7621446983903573,
+          "coding": 0.7617849914150466
+        },
+        "base_regression": 0.2910462872232031,
+        "repr_drift": 0.0,
+        "runtime_s": 6.5859479904174805,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ],
+    "AGX_H": [
+      {
+        "seed": 0,
+        "method": "AGX_H",
+        "per_domain_nll": {
+          "math": 2.344539465904236,
+          "planning": 2.3002668809890747,
+          "coding": 2.3369883251190187
+        },
+        "per_domain_retention": {
+          "math": 0.6554264658313369,
+          "planning": 0.5522306934231221,
+          "coding": 0.5456701161216128
+        },
+        "base_regression": 0.0013419059541880467,
+        "repr_drift": 0.0,
+        "runtime_s": 6.252674102783203,
+        "valid": true,
+        "has_per_sample_data": true
+      }
+    ]
+  }
+}

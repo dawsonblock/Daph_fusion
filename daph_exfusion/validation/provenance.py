@@ -44,6 +44,17 @@ class MergeProvenance:
     lambdas: List[float] = field(default_factory=list)
     seed: int = 42
     is_stochastic: bool = False
+    # v3 fields
+    method: str = ""
+    config_hash: str = ""
+    fisher_used: bool = False
+    fisher_estimator: str = ""
+    activation_covariance_used: bool = False
+    trust_region_enforced: bool = False
+    kfac_used: bool = False
+    base_precision_weight: float = 0.0
+    checkpoint_hashes: List[str] = field(default_factory=list)
+    dataset_hashes: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

@@ -1,19 +1,27 @@
-"""Curvature bank for AGX (Phase 6).
+"""CurvatureBank for v3 dense merge (Phase 6, 10).
 
-Caches empirical Fisher diagonals per expert × parameter so that AGX
-candidates using FISHER, TIES_FISHER, or DARE_TIES_FISHER can access
-curvature without recomputing in the search inner loop.
+Caches empirical Fisher diagonals per expert × parameter so that dense
+Fisher merge, base-anchored Fisher, and AGX can access curvature without
+recomputing in the search inner loop.
+
+Do not keep 7B Fisher tensors resident simultaneously. Use layer streaming,
+mmap, sharded safetensors, or CPU pinned storage.
 
 Usage:
     bank = CurvatureBank.build(base_model, experts, calibration_data, ...)
     fisher_for_expert_0 = bank.get_fisher("expert_0", "transformer.h.0.attn.c_attn.weight")
+
+Provenance:
+    Every CurvatureSnapshot records expert_name, checkpoint_hash,
+    calibration_hash, loss_definition, num_samples, estimator, dtype.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
@@ -21,10 +29,25 @@ from torch import Tensor
 
 
 @dataclass
+class CurvatureSnapshot:
+    """Provenance metadata for a Fisher snapshot."""
+    expert_name: str
+    checkpoint_hash: str
+    calibration_hash: str
+    loss_definition: str
+    num_samples: int
+    estimator: str          # "exact_per_sample" or "microbatch_gradient_square"
+    dtype: str              # "float32"
+    fisher_files: Dict[str, str] = field(default_factory=dict)  # param_name -> file path
+
+
+@dataclass
 class CurvatureBank:
     """Cached curvature data for all experts."""
     # expert_name -> param_name -> Fisher diagonal tensor
     fisher: Dict[str, Dict[str, Tensor]] = field(default_factory=dict)
+    # Per-expert provenance snapshots
+    snapshots: Dict[str, CurvatureSnapshot] = field(default_factory=dict)
     # Provenance metadata
     base_model_hash: str = ""
     calibration_data_hash: str = ""
@@ -58,7 +81,84 @@ class CurvatureBank:
             "param_counts": {
                 name: len(params) for name, params in self.fisher.items()
             },
+            "snapshots": {
+                name: snap.__dict__ for name, snap in self.snapshots.items()
+            },
         }
+
+    @classmethod
+    def build_from_exact_fisher(
+        cls,
+        base_model: nn.Module,
+        experts: Sequence[nn.Module],
+        calibration_data: Any,
+        device: Union[str, torch.device] = "cpu",
+        max_samples: int = 512,
+        expert_names: Optional[List[str]] = None,
+        expert_hashes: Optional[List[str]] = None,
+    ) -> "CurvatureBank":
+        """Build using the canonical exact_per_sample Fisher from fisher_dense.
+
+        This delegates to daph_exfusion.merge.fisher_dense.build_exact_fisher
+        which guarantees micro_batch=1 and per-sample gradient squaring.
+        """
+        from daph_exfusion.merge.fisher_dense import build_exact_fisher
+
+        if expert_names is None:
+            expert_names = [f"expert_{i}" for i in range(len(experts))]
+        if expert_hashes is None:
+            expert_hashes = [""] * len(experts)
+
+        # Hash calibration data
+        cal_hash = hashlib.sha256()
+        try:
+            for batch in calibration_data:
+                if isinstance(batch, dict):
+                    for k, v in sorted(batch.items()):
+                        if isinstance(v, torch.Tensor):
+                            cal_hash.update(v.cpu().numpy().tobytes())
+                        else:
+                            cal_hash.update(str(v).encode())
+                cal_hash.update(b"\n---\n")
+                if max_samples and cal_hash.hexdigest().count("n") > max_samples:
+                    break
+        except Exception:
+            pass
+        cal_hash_hex = cal_hash.hexdigest()[:16]
+
+        # Hash base model
+        base_hash = hashlib.sha256()
+        for name, param in base_model.named_parameters():
+            base_hash.update(name.encode("utf-8"))
+            base_hash.update(param.detach().float().sum().item().hex().encode())
+        base_hash_hex = base_hash.hexdigest()[:16]
+
+        bank = cls(
+            base_model_hash=base_hash_hex,
+            calibration_data_hash=cal_hash_hex,
+            n_samples=max_samples,
+            mode="exact_per_sample",
+            dtype="float32",
+        )
+
+        for expert, expert_name, expert_hash in zip(experts, expert_names, expert_hashes):
+            fisher, stats = build_exact_fisher(
+                expert, calibration_data,
+                device=device,
+                max_samples=max_samples,
+            )
+            bank.fisher[expert_name] = fisher
+            bank.snapshots[expert_name] = CurvatureSnapshot(
+                expert_name=expert_name,
+                checkpoint_hash=expert_hash,
+                calibration_hash=cal_hash_hex,
+                loss_definition="causal_lm_cross_entropy",
+                num_samples=max_samples,
+                estimator="exact_per_sample",
+                dtype="float32",
+            )
+
+        return bank
 
     @classmethod
     def build(

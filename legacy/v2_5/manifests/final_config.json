@@ -1,0 +1,33 @@
+{
+  "release": "v2.6.0-experimental-truth",
+  "config_hash": "c91025e5a4ab464d48d8ea24fc1acc7fdacf4c25fa045eacbad8ce1ef9a3998d",
+  "frozen_at": "2026-07-24T07:08:14.782058+00:00",
+  "config": {
+    "base_model": "distilgpt2",
+    "best_method": "task_arithmetic",
+    "seeds": [
+      11,
+      23,
+      37,
+      51,
+      73
+    ],
+    "domains": [
+      "math",
+      "planning",
+      "coding"
+    ],
+    "merge_scale": 0.5,
+    "merge_hyperparameters": {
+      "dare_drop_rate": 0.1,
+      "ties_trim_fraction": 0.2,
+      "fisher_gamma": 0.5,
+      "ties_sign_mode": "magnitude"
+    },
+    "operator_trace": [
+      "TASK_ARITHMETIC"
+    ],
+    "n_samples_validation": 50
+  },
+  "test_split_used_during_search": false
+}

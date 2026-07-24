@@ -1,15 +1,12 @@
 {
-  "release": "v3.0.0-dense-merge-dev",
-  "previous_release": "v2.6.0-experimental-truth",
+  "release": "v2.6.0-experimental-truth",
   "runtime_correctness": "pass",
-  "experimental_validity": "invalid_for_v2_5_results",
+  "experimental_validity": "partial",
   "qualified_experts": true,
   "merge_algorithms_validated": true,
   "agx_complete": false,
   "paper_ready": false,
-  "fisher_verified": false,
-  "agx_verified": false,
-  "paper_ready_reason": "v3.0 dense-merge program in development. v2.5 sparse results archived under legacy/v2_5/ with relabeled method names. Old 'fisher' was delta-squared weighting, 'exfusion' was DARE-delta2-trim, 'agx' was heuristic proxy. Do not cite v2.5 results as validated.",
+  "paper_ready_reason": "v2.6 research-candidate: experimental path now uses real algorithms but AGX-S search has not been run end-to-end and results need independent regeneration from checkpoints (not included in archive).",
   "known_blockers": [
     "agx_s_search_not_executed",
     "checkpoints_not_in_archive",
@@ -74,12 +71,6 @@
     "seeds": [11, 23, 37, 51, 73],
     "bootstrap_resamples": 10000
   },
-  "legacy_artifacts_frozen_at": "legacy/v2_5/",
-  "previous_legacy_artifacts_at": "artifacts/legacy_v2_5/",
-  "invalid_artifacts_archived_at": "artifacts/archive/invalid_unqualified_experts/",
-  "v3_relabel_map": {
-    "fisher": "legacy_delta_squared_weighting",
-    "exfusion": "legacy_dare_delta2_trim",
-    "agx": "legacy_heuristic_agx"
-  }
+  "legacy_artifacts_frozen_at": "artifacts/legacy_v2_5/",
+  "invalid_artifacts_archived_at": "artifacts/archive/invalid_unqualified_experts/"
 }

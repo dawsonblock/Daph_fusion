@@ -1,0 +1,17 @@
+{
+  "archive_version": "v2.5",
+  "relabel_map": {
+    "fisher": "legacy_delta_squared_weighting",
+    "exfusion": "legacy_dare_delta2_trim",
+    "agx": "legacy_heuristic_agx"
+  },
+  "reason": {
+    "fisher": "Was delta-squared weighting, not real empirical Fisher",
+    "exfusion": "Was DARE->TIES->delta2 trim, not a dense merge",
+    "agx": "Was a heuristic proxy, not a validated architecture search"
+  },
+  "paper_ready": false,
+  "fisher_verified": false,
+  "agx_verified": false,
+  "note": "Preserved for scientific traceability. Do not cite as validated results."
+}
