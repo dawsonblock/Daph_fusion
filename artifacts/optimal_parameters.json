@@ -26,38 +26,38 @@
     },
     "DARE": {
       "scale": 0.6,
-      "dare_p": 0.05,
+      "dare_p": 0.1,
       "ties_trim": 0.2,
       "fisher_gamma": 0.5,
-      "best_retention": 0.7340661921042871
+      "best_retention": 0.8407359276089122
     },
     "TIES": {
       "scale": 1.0,
       "dare_p": 0.1,
       "ties_trim": 0.5,
       "fisher_gamma": 0.5,
-      "best_retention": 0.7014164252748815
+      "best_retention": 0.8311074112328495
     },
     "DARE_TIES": {
       "scale": 1.0,
       "dare_p": 0.2,
       "ties_trim": 0.5,
       "fisher_gamma": 0.5,
-      "best_retention": 0.7039345183484805
+      "best_retention": 0.8264424149115377
     },
     "Fisher": {
       "scale": 1.0,
       "dare_p": 0.1,
       "ties_trim": 0.2,
       "fisher_gamma": 1.0,
-      "best_retention": 0.7167603084380637
+      "best_retention": 0.829050576285392
     },
     "ExFusion": {
       "scale": 1.0,
       "dare_p": 0.2,
       "ties_trim": 0.1,
-      "fisher_gamma": 0.5,
-      "best_retention": 0.7266619486795979
+      "fisher_gamma": 1.0,
+      "best_retention": 0.8344660853996815
     },
     "AGX": {
       "scale": 0.6,

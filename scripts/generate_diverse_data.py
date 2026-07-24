@@ -14,12 +14,82 @@ import argparse
 import hashlib
 import json
 import random
+import sys
 from pathlib import Path
 from typing import List, Tuple
+
+# Reuse the canonical audit MinHash so clustering and the release-gate audit
+# agree on what counts as a near-duplicate (same shingling, same signature).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from daph_exfusion.data.dataset_audit import (  # noqa: E402
+    _jaccard_from_signatures,
+    _minhash_signature,
+    _shingles,
+)
 
 
 def _hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+# Near-duplicate clustering threshold. Matches the release-gate audit threshold
+# (daph_exfusion/data/dataset_audit.py default 0.8). Clustering at this level
+# guarantees the audit's near_duplicate_threshold_pass check will be True,
+# because any pair with Jaccard >= threshold lands in the same split.
+NEAR_DUP_THRESHOLD = 0.8
+
+
+def _cluster_near_duplicates(records: List[dict],
+                             threshold: float = NEAR_DUP_THRESHOLD) -> List[List[int]]:
+    """Group near-duplicate records into connected components via union-find.
+
+    Two records are linked when their MinHash Jaccard similarity (using the
+    canonical audit shingling/signature) is >= threshold. Transitive closure
+    means any chain of near-duplicates stays within one component, and thus
+    one split.
+    """
+    n = len(records)
+    sigs = [_minhash_signature(_shingles(r["text"])) for r in records]
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if _jaccard_from_signatures(sigs[i], sigs[j]) >= threshold:
+                union(i, j)
+
+    comps: dict = {}
+    for i in range(n):
+        comps.setdefault(find(i), []).append(i)
+    return list(comps.values())
+
+
+def _assign_components_to_splits(components: List[List[int]],
+                                 n_splits: int) -> List[int]:
+    """Assign each component to a split via LPT (longest processing time first).
+
+    Returns a list mapping component index -> split index. Greedy assignment
+    to the currently-smallest split keeps split sizes balanced while
+    guaranteeing no component is split across two splits.
+    """
+    order = sorted(range(len(components)), key=lambda c: len(components[c]), reverse=True)
+    split_sizes = [0] * n_splits
+    assignment = [0] * len(components)
+    for ci in order:
+        target = min(range(n_splits), key=lambda s: split_sizes[s])
+        assignment[ci] = target
+        split_sizes[target] += len(components[ci])
+    return assignment
 
 
 # =============================================================================
@@ -577,7 +647,13 @@ def generate_dataset(output_dir: Path, samples_per_split: int = 200, seed: int =
 
     Generates ALL samples for ALL splits in a single pass per domain,
     deduplicates globally (across all splits), then partitions into splits.
-    This guarantees zero exact overlap between any pair of splits.
+
+    Partitioning is near-duplicate-aware: records are clustered by MinHash
+    Jaccard similarity (>= NEAR_DUP_THRESHOLD) into connected components, and
+    each component is assigned wholesale to a single split. This guarantees
+    both zero exact overlap AND zero cross-split near-duplicates, so the
+    release-gate audit (exact_overlap == 0 and near_duplicate_threshold_pass)
+    passes.
     """
     rng = random.Random(seed)
 
@@ -604,21 +680,31 @@ def generate_dataset(output_dir: Path, samples_per_split: int = 200, seed: int =
                 all_records.append({"text": text, "hash": h})
             attempts += 1
 
-        # Shuffle and partition into splits
-        gen_rng.shuffle(all_records)
-        split_size = len(all_records) // len(SPLITS)
+        # Cluster near-duplicates and assign whole components to splits so
+        # that no near-duplicate pair spans two splits.
+        components = _cluster_near_duplicates(all_records)
+        comp_split = _assign_components_to_splits(components, len(SPLITS))
+
+        # Shuffle component order within each split for record diversity,
+        # then write.
+        split_buckets: list = [[] for _ in SPLITS]
+        for ci, comp in enumerate(components):
+            split_buckets[comp_split[ci]].extend(all_records[i] for i in comp)
+        for bucket in split_buckets:
+            gen_rng.shuffle(bucket)
+
+        max_comp = max((len(c) for c in components), default=0)
+        print(f"  {domain}: {len(all_records)} samples, "
+              f"{len(components)} near-dup components (largest={max_comp})")
 
         for split_idx, split in enumerate(SPLITS):
-            start = split_idx * split_size
-            end = start + split_size if split_idx < len(SPLITS) - 1 else len(all_records)
-            split_records = all_records[start:end]
-
+            split_records = split_buckets[split_idx]
             split_path = domain_dir / f"{split}.jsonl"
             with open(split_path, "w", encoding="utf-8") as f:
                 for r in split_records:
                     f.write(json.dumps(r) + "\n")
 
-            print(f"  {domain}/{split}: {len(split_records)} samples")
+            print(f"    {domain}/{split}: {len(split_records)} samples")
 
     print(f"\nDataset generated in {output_dir}")
 

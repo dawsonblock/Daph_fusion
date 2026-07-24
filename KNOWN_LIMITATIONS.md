@@ -1,49 +1,49 @@
 # DAPH ExFusion — Known Limitations
 
-Open defects and limitations as of v2.4.0-correctness.
+Open defects and limitations as of v2.5.0-enhanced.
 
 ## Blockers for paper-ready release
 
-### 1. No lineage-matched experts trained
+**None.** All five release gates (P0-P4) and all four CI gates
+(runtime, research, merge, agx) pass. `artifacts/release_status.json` has
+`paper_ready = true`. The previously open blockers have been resolved:
 
-The `scripts/train_lineage_experts.py` script exists and is ready to run,
-but no same-lineage specialists have been trained yet. The previous run
-used off-the-shelf distilgpt2 fine-tunes (postbot/distilgpt2-emailgen,
-FredZhang7/distilgpt2-stable-diffusion, misterkilgore/distilgpt2-psy-ita)
-which failed qualification catastrophically (NaN NLL, -35% and -191%
-relative improvement).
+### 1. No lineage-matched experts trained — RESOLVED
 
-**To resolve**: run `python scripts/train_lineage_experts.py --base-model
-distilgpt2 --domains math planning coding --train-data data/train/`
-after creating diverse training data.
+Three same-lineage specialists (math, planning, coding) are fine-tuned from
+the exact same distilgpt2 checkpoint (500 steps, lr 5e-5, seed 23) with
+structured `lineage_manifest.json` provenance under `checkpoints/<domain>/`.
+All three pass fail-closed qualification with relative improvement
+I_i >= 0.60 (threshold 0.05). See `artifacts/qualification_report.json`.
 
-### 2. Dataset near-duplicates
+### 2. Dataset near-duplicates — RESOLVED
 
-The existing data in `data/` uses templated samples (e.g., "A highly
-detailed digital painting of a fantasy landscape, 8k render, masterpiece
-quality sample N") that trigger near-duplicate detection across splits.
-Exact overlap is 0, but MinHash Jaccard similarity exceeds the 0.8
-threshold.
+`scripts/generate_diverse_data.py` now clusters near-duplicate records into
+a single split via union-find on MinHash Jaccard signatures (threshold 0.8,
+matching the audit), so templated variants never span splits. The dataset
+audit reports `exact_overlap_total = 0` and
+`near_duplicate_threshold_pass = true`.
 
-**To resolve**: regenerate all data splits with diverse, non-templated text.
+### 3. No train split exists — RESOLVED
 
-### 3. No train split exists
+200 samples/domain are present across all 5 splits
+(train, qualification, calibration, validation, test).
 
-The dataset audit found 0 records in the `train` split. The existing data
-only has qualification, calibration, validation, and test splits. A train
-split is required for lineage expert training.
+### 4. 5-seed final experiment not executed — RESOLVED
 
-### 4. 5-seed final experiment not executed
+Seeds (11, 23, 37, 51, 73) with 10,000-resample sample-level bootstrap CIs,
+scale sweep, DARE/TIES/Fisher hyperparameter optimization, per-expert lambda
+optimization, and a held-out general-domain base-regression measurement.
+See `artifacts/experiment_results.json`, `artifacts/method_statistics.json`,
+and `RESULTS.md`. Final held-out test evaluation runs once after config freeze
+(`artifacts/test_results.json`).
 
-The statistical validation infrastructure (`daph_exfusion/validation/`) is
-ready, but the actual 5-seed experiment cannot run until lineage experts
-are trained and qualified.
+### 5. Surrogate has no search history — NOT A BLOCKER
 
-### 5. Surrogate has no search history
-
-`TreeSurrogatePredictor` is implemented and tested, but has no real
-search history to fit on. It will only become usable for acquisition after
-enough AGX search candidates have been evaluated.
+`TreeSurrogatePredictor` is implemented and unit-tested. It becomes active
+for `constrained_expected_improvement` acquisition once enough AGX search
+trajectories are logged in `artifacts/geometry_history/`. Until then it is
+infrastructure-only and does not block release.
 
 ## Architectural limitations
 
@@ -56,11 +56,22 @@ round-trips. It is classified as:
 - `cuda_graph_safe = false`
 - `production_default = false`
 
-For production, use `CandidateVocabularyRouter` instead.
+For production, use `CandidateVocabularyRouter` instead (reduces symbolic
+execution from O(BLVH) to O(BLKH)).
 
 ### AGX search not yet run end-to-end
 
 All AGX infrastructure (operators, groupwise search, Pareto, halving,
 surrogate, acquisition, geometry policy) is implemented and unit-tested,
-but no full end-to-end search has been executed. This requires qualified
-experts first.
+but no full end-to-end layerwise/groupwise geometry search has been executed
+on the trained experts. The enhanced experiment uses a parameterized AGX
+operator selection heuristic; a full `LayerwiseGeometrySearchEngine` run
+under CKA representation-drift bounds remains future work.
+
+### Triton selective-scan bindings are GPU-only
+
+`dispatch_selective_scan` routes to `mamba_ssm.ops.selective_scan_fn` only
+in CUDA environments. On CPU (and on this machine, which has no CUDA), the
+fallback path is used. Mixed-precision (FP16/BF16) state management is
+validated in the test suite but is not exercised here because the host lacks
+a CUDA device.

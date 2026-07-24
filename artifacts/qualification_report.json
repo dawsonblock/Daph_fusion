@@ -6,27 +6,27 @@
     {
       "expert_name": "lineage-math",
       "domain": "math",
-      "base_nll": 4.639547218420056,
-      "expert_nll": 0.9116044823106003,
-      "relative_improvement": 0.8035143432334682,
+      "base_nll": 4.693719681041117,
+      "expert_nll": 0.9237310095848278,
+      "relative_improvement": 0.8031985136828763,
       "passed": true,
       "rejection_reason": null
     },
     {
       "expert_name": "lineage-planning",
       "domain": "planning",
-      "base_nll": 4.523419664816114,
-      "expert_nll": 0.5129973585058477,
-      "relative_improvement": 0.8865908103782579,
+      "base_nll": 4.459667921910742,
+      "expert_nll": 0.6487879398440527,
+      "relative_improvement": 0.8545210201287633,
       "passed": true,
       "rejection_reason": null
     },
     {
       "expert_name": "lineage-coding",
       "domain": "coding",
-      "base_nll": 3.7603157225775865,
-      "expert_nll": 0.7900204919268619,
-      "relative_improvement": 0.789905808391715,
+      "base_nll": 3.7447063372945686,
+      "expert_nll": 1.4942187166450884,
+      "relative_improvement": 0.600978399357047,
       "passed": true,
       "rejection_reason": null
     }

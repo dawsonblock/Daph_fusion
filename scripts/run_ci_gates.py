@@ -83,7 +83,7 @@ def gate_research() -> bool:
     """Research integrity gate."""
     print("\n=== RESEARCH INTEGRITY GATE ===")
 
-    # Dataset disjointness
+    # Dataset disjointness (audit logic on synthetic data)
     code, out = _run([
         sys.executable, "-m", "pytest",
         "tests/test_dataset_audit.py", "-q", "--tb=short",
@@ -92,6 +92,28 @@ def gate_research() -> bool:
         print(f"FAIL: dataset disjointness\n{out}")
         return False
     print("PASS: dataset disjointness tests")
+
+    # Real-data audit: run the canonical audit over the actual data/ dir.
+    # The unit tests above only exercise the audit logic on synthetic temp
+    # data; this check enforces the real corpus satisfies the release gate
+    # (exact_overlap == 0 AND near_duplicate_threshold_pass == True).
+    code, out = _run([
+        sys.executable, "-c",
+        "from pathlib import Path; "
+        "from daph_exfusion.data.dataset_audit import audit_dataset; "
+        "r = audit_dataset(Path('data')); "
+        "print(f'exact_overlap_total={r.exact_overlap_total} "
+        "near_dup_pass={r.near_duplicate_threshold_pass} "
+        "gate={r.pass_release_gate}'); "
+        "assert r.exact_overlap_total == 0, 'exact overlap > 0'; "
+        "assert r.near_duplicate_threshold_pass, 'near-duplicates across splits'; "
+        "assert r.pass_release_gate, 'release gate failed'; "
+        "print('OK: real data audit passes release gate')",
+    ])
+    if code != 0:
+        print(f"FAIL: real-data audit\n{out}")
+        return False
+    print(f"PASS: real-data audit ({out.strip().splitlines()[-1]})")
 
     # Expert qualification
     code, out = _run([

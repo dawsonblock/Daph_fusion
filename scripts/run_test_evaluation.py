@@ -20,10 +20,8 @@ from research_metrics import compute_domain_nll, calculate_retention
 from scripts.run_final_experiment import (
     load_jsonl,
     extract_task_vectors,
-    merge_task_arithmetic,
-    merge_dare,
-    merge_ties,
 )
+from scripts.run_enhanced_experiment import build_merged
 
 
 def main():
@@ -44,13 +42,36 @@ def main():
     print(f"  Mean retention: {np.mean(list(merge_methods[best_method]['mean_retention'].values())):.4f}")
     print(f"  Worst retention: {merge_methods[best_method]['worst_domain_retention_mean']:.4f}")
 
+    # Load optimized parameters found during the validation-phase search so the
+    # held-out test evaluation uses the exact frozen configuration (scale +
+    # hyperparameters + lambdas) rather than hardcoded defaults.
+    with open("artifacts/optimal_parameters.json") as f:
+        opt = json.load(f)
+    opt_scales = opt.get("optimal_scales", {})
+    opt_params = opt.get("optimal_params", {})
+    opt_lambdas = opt.get("optimal_lambdas", [1.0] * len(domains))
+    best_scale = opt_scales.get(best_method, 0.5)
+    best_hp = opt_params.get(best_method, {})
+    dare_p = best_hp.get("dare_p", 0.1)
+    ties_trim = best_hp.get("ties_trim", 0.2)
+    fisher_gamma = best_hp.get("fisher_gamma", 0.5)
+    print(f"  Using optimized params: scale={best_scale}, "
+          f"dare_p={dare_p}, ties_trim={ties_trim}, fisher_gamma={fisher_gamma}, "
+          f"lambdas={opt_lambdas}")
+
     # Freeze the config
     config = {
         "base_model": base_model_id,
         "best_method": best_method,
         "seeds": [11, 23, 37, 51, 73],
         "domains": domains,
-        "merge_scale": 0.5,
+        "merge_scale": best_scale,
+        "merge_hyperparameters": {
+            "dare_p": dare_p,
+            "ties_trim": ties_trim,
+            "fisher_gamma": fisher_gamma,
+        },
+        "optimal_lambdas": opt_lambdas,
         "n_samples_validation": 50,
     }
     frozen = freeze_config(config, release="v2.4.0-correctness")
@@ -92,16 +113,14 @@ def main():
         expert_nlls[domain], _ = compute_domain_nll(experts[i], tokenizer, test_data[domain][:50], device=device)
         print(f"  {domain}: base_nll={base_nlls[domain]:.4f}, expert_nll={expert_nlls[domain]:.4f}")
 
-    # Evaluate best method on test
+    # Evaluate best method on test using the SAME merge construction and
+    # optimized parameters as the validation-phase experiment.
     print(f"\nEvaluating {best_method} on test split...")
-    if best_method == "task_arithmetic":
-        merged = merge_task_arithmetic(base_model, task_vectors, scale=0.5)
-    elif best_method == "DARE":
-        merged = merge_dare(base_model, task_vectors, scale=0.5, p=0.1, seed=42)
-    elif best_method == "TIES":
-        merged = merge_ties(base_model, task_vectors, scale=0.5, trim=0.2)
-    else:
-        merged = merge_task_arithmetic(base_model, task_vectors, scale=0.5)
+    merged = build_merged(
+        base_model_id, task_vectors, best_method,
+        scale=best_scale, dare_p=dare_p, ties_trim=ties_trim,
+        fisher_gamma=fisher_gamma, seed=42, lambdas=opt_lambdas,
+    )
 
     merged.to(device)
     merged.eval()
