@@ -1,0 +1,43 @@
+{
+  "valid_for_research_claims": false,
+  "retention_metrics_valid": false,
+  "reason": "source experts failed qualification gate",
+  "archived_at": "2026-07-23",
+  "source_commit": "4ab5a94e37abc6b2d577745375dc7c3650718dae",
+  "qualification_status": "FAIL",
+  "failed_experts": [
+    {
+      "expert": "postbot/distilgpt2-emailgen",
+      "domain": "math",
+      "rejection": "expert_nll NaN; relative_improvement NaN < 0.05"
+    },
+    {
+      "expert": "FredZhang7/distilgpt2-stable-diffusion",
+      "domain": "planning",
+      "rejection": "relative_improvement -0.3541 < 0.05 (expert worse than base)"
+    },
+    {
+      "expert": "misterkilgore/distilgpt2-psy-ita",
+      "domain": "coding",
+      "rejection": "relative_improvement -1.9124 < 0.05 (catastrophic regression)"
+    }
+  ],
+  "additional_defects_present_in_run": [
+    "sparse_mamba_sequence_semantics",
+    "fp16_symbolic_prior_overflow",
+    "cka_batch1_failure",
+    "baseline_semantics_mismatch",
+    "nonstandard_dare_default",
+    "duplicated_fisher_implementations",
+    "agx_operator_stubs"
+  ],
+  "contents": {
+    "experiment_results.json": "raw experiment output (invalid)",
+    "RESULTS.md": "generated results narrative (invalid)",
+    "qualification_report.json": "expert qualification gate result (FAIL)",
+    "search_results.json": "AGX search result (invalid; built on unqualified experts)",
+    "run_config.json": "configuration used for the invalid run",
+    "model_manifest.json": "base model manifest for the invalid run",
+    "source_commit.txt": "git commit hash that produced these artifacts"
+  }
+}

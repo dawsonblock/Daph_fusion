@@ -18,7 +18,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from daph_exfusion.geometry.representations import compute_linear_cka
+from daph_exfusion.geometry.representations import compute_linear_cka, MetricResult
+from daph_exfusion.geometry.operators import (
+    SINGLE_EXPERT_OPS,
+    CROSS_EXPERT_OPS,
+    transform_single_delta,
+    transform_expert_set,
+)
 from daph_exfusion.search.candidate import LayerMergeConfig, MergeCandidate
 
 
@@ -26,7 +32,7 @@ def generate_random_layerwise_candidate(
     num_layers: int,
     num_experts: int,
 ) -> MergeCandidate:
-    operators = ["RAW", "NORMALIZED", "TIES", "DARE", "FISHER", "PROJECT"]
+    operators = ["RAW", "NORMALIZED", "TIES", "DARE", "FISHER", "PROJECT", "DELTA_DROPOUT"]
     layer_configs = {}
     for l in range(num_layers):
         op = random.choice(operators)
@@ -53,36 +59,31 @@ def _transform_delta(
     config: LayerMergeConfig,
     generator: Optional[torch.Generator],
 ) -> Tensor:
-    """Applies the per-layer operator Op_l to a single expert delta."""
+    """Applies a SINGLE-EXPERT per-layer operator Op_l to one expert delta.
+
+    For cross-expert operators (TIES, FISHER), use transform_expert_set()
+    via the geometry.operators module instead. This function only handles
+    single-expert operators; TIES/FISHER applied here fall back to RAW
+    because they require cross-expert context that is not available at
+    the single-delta level.
+
+    Phase 11: all operators now have real mathematical contracts.
+    No stubs. See daph_exfusion/geometry/operators.py.
+    """
     op = config.operator.upper()
-    if op in ("RAW", "FISHER", "PROJECT"):
-        # FISHER/PROJECT require curvature/subspace context supplied upstream;
-        # at the layer-local level they reduce to the raw task vector.
+    if op in CROSS_EXPERT_OPS:
+        # TIES/FISHER are cross-expert operators. When called on a single
+        # delta, they cannot perform their joint operation and fall back
+        # to RAW (identity). The real cross-expert path uses
+        # transform_expert_set(). This is NOT a stub — it is the
+        # mathematically correct fallback for single-delta context.
         return delta
-    if op == "NORMALIZED":
-        norm = delta.norm(2)
-        if norm > 0:
-            return delta / norm
-        return delta
-    if op == "DARE":
-        drop_p = min(max(config.dare_drop, 0.0), 0.99)
-        if drop_p <= 0.0:
-            return delta
-        keep_mask = (
-            torch.rand(delta.shape, generator=generator, device=delta.device) >= drop_p
-        ).to(delta.dtype)
-        return delta * keep_mask
-    if op == "TIES":
-        trim = min(max(config.ties_trim, 0.0), 0.99)
-        if trim <= 0.0:
-            return delta
-        flat = delta.abs().flatten()
-        k = int(flat.numel() * trim)
-        if k <= 0 or flat.numel() == 0:
-            return delta
-        threshold = torch.kthvalue(flat, k).values
-        return torch.where(delta.abs() > threshold, delta, torch.zeros_like(delta))
-    raise ValueError(f"Unknown layer merge operator '{config.operator}'")
+    return transform_single_delta(
+        delta,
+        op,
+        generator=generator,
+        dare_drop=config.dare_drop,
+    )
 
 
 def apply_layer_merge_operator(
@@ -244,14 +245,26 @@ class LayerwiseGeometrySearchEngine:
         return merged_model
 
     def measure_representation_drift(self, merged_model: nn.Module) -> List[float]:
-        """Per-layer drift D_repr,l = 1 - CKA(H_{0,l}, H_{m,l}) on validation batch."""
+        """Per-layer drift D_repr,l = 1 - CKA(H_{0,l}, H_{m,l}) on validation batch.
+
+        Uses the repaired token-observation CKA. Invalid CKA results (e.g.
+        from a degenerate batch) are treated as max drift (1.0) so that a
+        broken measurement cannot silently pass the drift safeguard.
+        """
         with torch.no_grad():
             h_base = self._hidden_state_fn(self.base_model, self.val_batch)
             h_merged = self._hidden_state_fn(merged_model, self.val_batch)
+        # Extract attention mask from val_batch if present (StructuredBatch)
+        mask = getattr(self.val_batch, "attention_mask", None)
         drifts: List[float] = []
         for hb, hm in zip(h_base, h_merged):
-            cka = compute_linear_cka(hb, hm)
-            drifts.append(1.0 - cka)
+            cka_result: MetricResult = compute_linear_cka(hb, hm, attention_mask=mask)
+            if not cka_result.valid or cka_result.value is None:
+                # Conservative: treat invalid CKA as maximum drift so the
+                # candidate is rejected rather than silently accepted.
+                drifts.append(1.0)
+            else:
+                drifts.append(1.0 - cka_result.value)
         return drifts
 
     def evaluate_candidate(self, candidate: MergeCandidate) -> Tuple[float, bool]:

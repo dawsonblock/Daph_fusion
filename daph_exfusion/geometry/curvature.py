@@ -4,6 +4,11 @@ Empirical Fisher & Curvature Estimation (Phase 21-22).
 Includes disk-backed / CPU-offloaded diagonal accumulation for large models
 (ISSUES.md - Issue 3): gradients are squared and accumulated in CPU RAM or
 memory-mapped float32 file buffers instead of GPU VRAM.
+
+Phase 9 unification: the canonical API is `build_fisher_diagonal` in
+`daph_exfusion/curvature/fisher.py`. The functions below delegate to it
+and add the offloaded-accumulation path. Padding is now handled correctly
+(labels[attention_mask==0] = -100 before causal shifting).
 """
 
 from __future__ import annotations
@@ -16,6 +21,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+
+
+def _build_labels_with_padding(
+    input_ids: Tensor,
+    attention_mask: Optional[Tensor] = None,
+) -> Tensor:
+    """Construct labels with padding masked to -100 before causal shifting.
+
+    Phase 9 fix: the previous implementation used sub_input[:, 1:] directly
+    as labels, which included padding tokens in the loss (and thus in the
+    Fisher gradient). Padding tokens must be excluded.
+    """
+    labels = input_ids.clone()
+    if attention_mask is not None:
+        labels[attention_mask == 0] = -100
+    return labels
 
 
 def build_empirical_fisher_diagonals(
@@ -52,8 +73,10 @@ def build_empirical_fisher_diagonals(
         outputs = model(sub_input, attention_mask=sub_mask)
         logits = outputs.logits if hasattr(outputs, "logits") else outputs
 
+        # Phase 9 fix: mask padding labels to -100 BEFORE causal shift
+        labels = _build_labels_with_padding(sub_input, sub_mask)
         shift_logits = logits[:, :-1, :].contiguous()
-        shift_labels = sub_input[:, 1:].contiguous()
+        shift_labels = labels[:, 1:].contiguous()
 
         loss = F.cross_entropy(
             shift_logits.view(-1, shift_logits.size(-1)),
@@ -96,6 +119,8 @@ def build_empirical_fisher_diagonals_offloaded(
       - use_mmap=True: disk-backed memory-mapped float32 buffers created with
         torch.from_file (shared mmap), enabling 70B+ scale accumulation without
         resident RAM pressure.
+
+    Phase 9 fix: padding labels are now masked to -100 before causal shifting.
     """
     if micro_batch_size < 1:
         raise ValueError("micro_batch_size must be >= 1")
@@ -150,9 +175,11 @@ def build_empirical_fisher_diagonals_offloaded(
         outputs = model(sub_ids, attention_mask=sub_mask)
         logits = outputs.logits if hasattr(outputs, "logits") else outputs
 
+        # Phase 9 fix: mask padding labels to -100 BEFORE causal shift
+        labels = _build_labels_with_padding(sub_ids, sub_mask)
         loss = F.cross_entropy(
             logits[:, :-1, :].reshape(-1, logits.size(-1)),
-            sub_ids[:, 1:].reshape(-1),
+            labels[:, 1:].reshape(-1),
             ignore_index=-100,
         )
         loss.backward()

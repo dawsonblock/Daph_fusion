@@ -1,0 +1,29 @@
+{
+  "release": "v2.4.0-correctness",
+  "runtime_correctness": "blocked",
+  "experimental_validity": "blocked",
+  "qualified_experts": false,
+  "merge_algorithms_validated": false,
+  "agx_complete": false,
+  "paper_ready": false,
+  "known_blockers": [
+    "sparse_mamba_sequence_semantics",
+    "fp16_symbolic_prior_overflow",
+    "cka_batch1_failure",
+    "unqualified_experts",
+    "invalid_retention_artifacts",
+    "baseline_semantics_mismatch",
+    "nonstandard_dare_default",
+    "duplicated_fisher_implementations",
+    "agx_operator_stubs"
+  ],
+  "gates": {
+    "P0_runtime_correctness": "blocked",
+    "P1_experimental_validity": "blocked",
+    "P2_merge_algorithm_integrity": "blocked",
+    "P3_agx_implementation": "blocked",
+    "P4_statistical_validation": "blocked"
+  },
+  "publication_claims_disabled": true,
+  "invalid_artifacts_archived_at": "artifacts/archive/invalid_unqualified_experts/"
+}

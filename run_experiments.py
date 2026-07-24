@@ -46,7 +46,9 @@ from experiments.qualification import (
     ExpertQualification,
     ExpertQualificationPipeline,
     InvalidExperiment,
+    QualificationError,
 )
+from research_metrics import calculate_retention
 
 # =============================================================================
 # 1. DOMAIN DATASET PREPARATION (QUALIFICATION vs. CALIBRATION vs. HELD-OUT EVAL)
@@ -207,13 +209,22 @@ def enforce_preflight_qualification(
     qualification_data: Dict[str, List[str]],
     tokenizer: Any,
     device: str,
-) -> List[ExpertQualification]:
+    mode: str = "official",
+) -> Tuple[List[ExpertQualification], bool]:
     """Runs the Phase 1 preflight qualification gate before any merge sweep.
 
-    Fail-closed by default: raises InvalidExperiment when any candidate expert
-    fails the relative-improvement threshold I_i >= 0.05. Set the environment
-    variable DAPH_ALLOW_UNQUALIFIED_EXPERTS=1 to downgrade the hard failure to
-    a diagnostic warning (retention metrics are then diagnostic only).
+    Mode split (Phase 4 of the repair plan):
+      - mode="official" (default): FAIL-CLOSED. Raises QualificationError if
+        any expert fails. The environment variable
+        DAPH_ALLOW_UNQUALIFIED_EXPERTS has NO effect on the official path.
+      - mode="debug": proceeds past unqualified experts, but returns
+        official=False so that all downstream artifacts are tagged as
+        non-official. The env var is still ignored; debug mode is an
+        explicit API parameter, not an env-var escape hatch.
+
+    Returns:
+        (qualifications, official) where `official` is True only when
+        mode="official" AND all experts passed.
     """
     pipeline = ExpertQualificationPipeline(
         base_model, tokenizer, device=device, min_expert_improvement=0.05
@@ -234,20 +245,24 @@ def enforce_preflight_qualification(
             f"Rel Gain = {q.relative_improvement:.4f} | Passed = {q.passed}"
         )
 
-    try:
-        # Fail closed if any candidate expert fails qualification
-        pipeline.validate_preflight(qualifications)
+    all_passed = all(q.passed for q in qualifications)
+
+    if mode == "official":
+        if not all_passed:
+            # Hard fail. The env var MUST NOT override the official path.
+            pipeline.validate_preflight(qualifications)  # raises QualificationError
         print("[✓] Preflight qualification gate PASSED: all experts qualified.")
-    except InvalidExperiment as exc:
-        if os.environ.get("DAPH_ALLOW_UNQUALIFIED_EXPERTS") == "1":
-            print(f"[!] WARNING (fail-open override): {exc}")
+        return qualifications, True
+    elif mode == "debug":
+        if not all_passed:
+            failed = [q.expert_name for q in qualifications if not q.passed]
             print(
-                "[!] Proceeding because DAPH_ALLOW_UNQUALIFIED_EXPERTS=1; "
-                "retention metrics involving unqualified experts are diagnostic only."
+                f"[!] DEBUG MODE: proceeding with unqualified experts {failed}. "
+                f"All artifacts from this run will be tagged official=false."
             )
-        else:
-            raise
-    return qualifications
+        return qualifications, False
+    else:
+        raise ValueError(f"Unknown qualification mode '{mode}'; use 'official' or 'debug'.")
 
 
 # =============================================================================
@@ -420,7 +435,8 @@ def run_experiments():
         {"name": expert_ids[2], "revision": "main", "domain": "coding"},
     ]
     enforce_preflight_qualification(
-        base_model, experts, expert_metadata, qual_data, tokenizer, device
+        base_model, experts, expert_metadata, qual_data, tokenizer, device,
+        mode="official",
     )
 
     # 1. Compute Base Model & Expert Benchmarks
@@ -567,11 +583,22 @@ def run_experiments():
                 )
                 res_dict[f"{d}_nll"] = round(nll, 4)
 
-                # Retention Score R_d = (NLL_base - NLL_merged) / (NLL_base - NLL_expert)
-                denom = base_nlls[d] - expert_nlls[d]
-                r_d = ((base_nlls[d] - nll) / denom) * 100.0 if denom != 0 else 0.0
-                res_dict[f"R_{d}"] = round(r_d, 2)
-                ret_scores.append(r_d)
+                # Canonical retention via the single source of truth.
+                # Do NOT re-implement R_d inline here.
+                ret = calculate_retention(
+                    base_loss=base_nlls[d],
+                    expert_loss=expert_nlls[d],
+                    merged_loss=nll,
+                )
+                if ret.valid and ret.value is not None:
+                    r_d = ret.value * 100.0  # report as percentage
+                    res_dict[f"R_{d}"] = round(r_d, 2)
+                    res_dict[f"R_{d}_interpretation"] = ret.interpretation
+                    ret_scores.append(r_d)
+                else:
+                    res_dict[f"R_{d}"] = None
+                    res_dict[f"R_{d}_invalid_reason"] = ret.reason
+                    ret_scores.append(float("nan"))
 
             r_bar = sum(ret_scores) / len(ret_scores)
             res_dict["R_bar"] = round(r_bar, 2)
@@ -582,13 +609,30 @@ def run_experiments():
                     f" -> Scale {scale:.2f} ({method_name:<22}) | R_bar: {r_bar:>6.2f}% | Math R: {ret_scores[0]:>5.1f}% | Plan R: {ret_scores[1]:>5.1f}% | Code R: {ret_scores[2]:>5.1f}%"
                 )
 
-    # 4. Save Artifacts
+    # 4. Save Artifacts with validation metadata
     os.makedirs("artifacts", exist_ok=True)
+    # Determine validity flags for the artifact schema
+    all_experts_qualified = all(
+        math.isfinite(v) for v in base_nlls.values()
+    ) and all(
+        math.isfinite(v) for v in expert_nlls.values()
+    ) and all(
+        expert_nlls[d] < base_nlls[d] for d in domains
+    )
+    all_metrics_valid = all(
+        isinstance(r.get(f"R_{d}"), (int, float)) and not math.isnan(r.get(f"R_{d}", float("nan")))
+        for r in sweep_results
+        for d in domains
+        if f"R_{d}" in r
+    )
     artifacts_data = {
         "base_nlls": {k: round(v, 4) for k, v in base_nlls.items()},
         "expert_nlls": {k: round(v, 4) for k, v in expert_nlls.items()},
         "interference": interference,
         "sweep_results": sweep_results,
+        "all_experts_qualified": all_experts_qualified,
+        "all_metrics_valid": all_metrics_valid,
+        "official": True,
     }
 
     with open("artifacts/experiment_results.json", "w") as f:

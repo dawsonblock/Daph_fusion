@@ -52,6 +52,41 @@ BIAS_FORBID = -1e5
 SYMBOLIC_PATH = 4
 
 
+def clamp_symbolic_priors(
+    priors: Tensor,
+    logits: Tensor,
+    requested_limit: float = 1.0e4,
+) -> Tensor:
+    """Clamp symbolic priors to a range safely representable in logits.dtype.
+
+    Symbolic priors use magnitudes like BIAS_FORCE=1e5 to mandate/forbid a
+    routing path. In FP16 the max finite value is ~65504, so 1e5 overflows
+    to `inf` and produces NaN logits after softmax. This helper:
+
+      1. Validates that `logits` is floating point (router logits must be).
+      2. Computes a dtype-safe upper bound = finfo(logits.dtype).max / 4.
+      3. Clamps `priors` (cast to logits.dtype/device) to +/- min(requested_limit,
+         dtype_limit).
+
+    Use this EVERYWHERE symbolic biases enter logits:
+      - NeSyMacroRouter.forward
+      - TokenizerBoundRulesEngine integration
+      - output verifier if it modifies logits
+      - future symbolic policy modules
+    """
+    if not logits.is_floating_point():
+        raise TypeError("Router logits must be floating point")
+    if not torch.isfinite(logits).all():
+        raise FloatingPointError(
+            "Router logits contain non-finite values before adding symbolic priors"
+        )
+    dtype_limit = float(torch.finfo(logits.dtype).max) / 4.0
+    safe_limit = min(float(requested_limit), dtype_limit)
+    return priors.to(device=logits.device, dtype=logits.dtype).clamp(
+        -safe_limit, safe_limit
+    )
+
+
 # =============================================================================
 # 1. NeSy MACRO-ROUTER (symbolic priors before softmax)
 # =============================================================================
@@ -65,12 +100,19 @@ class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
     and added to the neural logits: z_eff = z_neural + b_symbolic.
     Mandate a path: +1e5. Forbid: -1e5. Neutral: 0.
     Supports temperature-annealed Gumbel-Softmax sampling in training mode.
+
+    Mixed-precision safety: priors are clamped via `clamp_symbolic_priors`
+    before being added to logits, so BIAS_FORCE=1e5 does not overflow FP16
+    (max finite ~65504) or BF16 into NaN.
     """
 
     def __init__(self, *args: Any, tau: float = 1.0, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._pending_priors: Optional[Tensor] = None
         self.tau = tau
+        # Opt-in finiteness assertion on the final logits (set via
+        # config.assert_numerics from the owning layer).
+        self.assert_numerics: bool = False
 
     def set_priors(self, priors: Optional[Tensor]) -> None:
         self._pending_priors = priors
@@ -87,7 +129,9 @@ class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
             symbolic_priors if symbolic_priors is not None else self._pending_priors
         )
         if priors is not None:
-            priors = priors.to(logits.device, logits.dtype)
+            # Mixed-precision safe clamping: prevents BIAS_FORCE=1e5 from
+            # overflowing FP16/BF16 into inf/NaN.
+            priors = clamp_symbolic_priors(priors, logits)
 
             # Safely align prior dimensions against router logits shape
             if priors.dim() == 2 and logits.dim() == 3:
@@ -103,6 +147,13 @@ class NeSyMacroRouter(PredictiveDifficultyMacroRouter):
                     f"num_paths {logits.shape[-1]}"
                 )
             logits = logits + priors
+
+        if self.assert_numerics and not torch.isfinite(logits).all():
+            raise FloatingPointError(
+                "NeSyMacroRouter produced non-finite logits after adding "
+                "symbolic priors. Check prior magnitudes vs logits dtype "
+                f"({logits.dtype})."
+            )
 
         if self.training:
             temp = temperature if temperature is not None else self.tau
@@ -770,6 +821,7 @@ class NeSyDecoderLayer(DAPHHybridDecoderLayer):
             granularity=config.routing_granularity,
         )
         nesy_router.load_state_dict(self.macro_router.state_dict())
+        nesy_router.assert_numerics = config.assert_numerics
         self.macro_router = nesy_router
         if rules_engine is None:
             self.rules_engine = TokenizerBoundRulesEngine(num_paths=config.num_paths)

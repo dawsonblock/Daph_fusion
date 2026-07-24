@@ -12,6 +12,7 @@ class RetentionResult(NamedTuple):
     valid: bool
     value: Optional[float]
     reason: Optional[str]
+    interpretation: Optional[str] = None
 
 
 def compute_expert_advantage(base_loss: float, expert_loss: float) -> float:
@@ -28,7 +29,16 @@ def calculate_retention(
     """
     Computes specialist-relative retention:
       R_d = (L_base - L_merged) / (L_base - L_expert)
-    Only valid if G_d = L_base - L_expert > epsilon.
+    Only valid if G_d = L_base - L_expert > epsilon (i.e. the expert
+    actually outperforms the base on this domain).
+
+    The value is NOT clipped to [0, 1]:
+      - R > 1.0 means the merged model outperformed the specialist
+        (interpretation="merged_outperformed_specialist")
+      - R < 0.0 means the merged model is worse than the base
+        (interpretation="merged_worse_than_base")
+      - R == 1.0 means the merged model matched the specialist
+      - R == 0.0 means the merged model matched the base
     """
     advantage = compute_expert_advantage(base_loss, expert_loss)
     if advantage <= epsilon:
@@ -36,13 +46,26 @@ def calculate_retention(
             valid=False,
             value=None,
             reason="expert_does_not_outperform_base",
+            interpretation=None,
         )
 
     retention_val = (base_loss - merged_loss) / advantage
+    if retention_val > 1.0 + epsilon:
+        interpretation = "merged_outperformed_specialist"
+    elif retention_val < -epsilon:
+        interpretation = "merged_worse_than_base"
+    elif abs(retention_val - 1.0) <= epsilon:
+        interpretation = "merged_matched_specialist"
+    elif abs(retention_val) <= epsilon:
+        interpretation = "merged_matched_base"
+    else:
+        interpretation = "partial_retention"
+
     return RetentionResult(
         valid=True,
         value=float(retention_val),
         reason=None,
+        interpretation=interpretation,
     )
 
 

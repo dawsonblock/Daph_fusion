@@ -1,211 +1,263 @@
-#!/usr/bin/env python3
-"""
-Lineage-Matched Expert Fine-Tuning Utility (Phase 1 / Phase 3 of ROADMAP_PLAN.md).
+#!/usr/bin/env python
+"""Train same-lineage specialist experts from a single base checkpoint.
 
-Fine-tunes domain-specialist checkpoints directly from the exact base model
-checkpoint (default: distilbert/distilgpt2) so every expert shares identical
-lineage, parameter topology, and tokenizer with the merge target theta_0.
-
-Training data is read from the isolated 4-layer dataset splits:
-    data/{domain}/qualification.jsonl   (never used for training)
-    data/{domain}/calibration.jsonl     (default training split)
+Phase 4.2 of the DAPH ExFusion repair plan. All specialists MUST originate
+from the exact same base checkpoint and tokenizer so that task-vector merges
+are on-lineage. The previous run used off-the-shelf distilgpt2 fine-tunes
+(postbot/distilgpt2-emailgen, FredZhang7/distilgpt2-stable-diffusion,
+misterkilgore/distilgpt2-psy-ita) which failed qualification.
 
 Usage:
-    python3 scripts/train_lineage_experts.py \
-        --base-model distilbert/distilgpt2 \
-        --domain math \
-        --train-jsonl data/math/calibration.jsonl \
-        --output-dir artifacts/experts/math
+    python scripts/train_lineage_experts.py \
+        --base-model distilgpt2 \
+        --output-dir checkpoints \
+        --domains math planning coding \
+        --train-data data/train/ \
+        --steps 500 --lr 5e-5 --seed 23
 
-    # Train all domains in one pass:
-    python3 scripts/train_lineage_experts.py --all
+Each produced checkpoint directory contains:
+    pytorch_model.bin   (or safetensors)
+    config.json
+    tokenizer files
+    lineage_manifest.json   (base_model, base_revision, tokenizer_hash,
+                             training_data_hash, seed, steps, lr)
 """
-
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
-import sys
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional
 
 import torch
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-DEFAULT_BASE_MODEL = "distilbert/distilgpt2"
-DEFAULT_DOMAINS = ("math", "planning", "coding")
+import torch.nn as nn
+from torch.utils.data import DataLoader, Dataset
 
 
-def load_jsonl_texts(path: str) -> List[str]:
-    """Loads newline-delimited JSON records with a 'text' field."""
-    texts: List[str] = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            record = json.loads(line)
-            text = record.get("text") if isinstance(record, dict) else None
-            if text:
-                texts.append(str(text))
+def _hash_str(s: str) -> str:
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+def _hash_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _canonicalize_text(text: str) -> str:
+    """Unicode + whitespace + newline normalization before hashing."""
+    import unicodedata
+
+    text = unicodedata.normalize("NFKC", text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Collapse runs of whitespace except newlines
+    lines = []
+    for line in text.split("\n"):
+        lines.append(" ".join(line.split()))
+    return "\n".join(lines).strip()
+
+
+def _hash_training_data(data_dir: Path, domain: str) -> str:
+    """SHA-256 of canonicalized training text for a domain."""
+    domain_dir = data_dir / domain
+    if not domain_dir.exists():
+        raise FileNotFoundError(f"Training data dir not found: {domain_dir}")
+    h = hashlib.sha256()
+    for f in sorted(domain_dir.glob("*.txt")):
+        text = f.read_text(encoding="utf-8")
+        canonical = _canonicalize_text(text)
+        h.update(canonical.encode("utf-8"))
+        h.update(b"\n---\n")
+    return h.hexdigest()
+
+
+class TextDataset(Dataset):
+    def __init__(self, texts: List[str], tokenizer, max_length: int = 128):
+        self.texts = texts
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        enc = self.tokenizer(
+            self.texts[idx],
+            truncation=True,
+            max_length=self.max_length,
+            padding="max_length",
+            return_tensors="pt",
+        )
+        input_ids = enc["input_ids"].squeeze(0)
+        attention_mask = enc["attention_mask"].squeeze(0)
+        labels = input_ids.clone()
+        labels[attention_mask == 0] = -100
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
+
+def load_domain_texts(data_dir: Path, domain: str) -> List[str]:
+    domain_dir = data_dir / domain
+    if not domain_dir.exists():
+        raise FileNotFoundError(f"Training data dir not found: {domain_dir}")
+    texts = []
+    for f in sorted(domain_dir.glob("*.txt")):
+        texts.append(f.read_text(encoding="utf-8"))
     if not texts:
-        raise ValueError(f"No usable 'text' records found in {path}")
+        raise ValueError(f"No .txt training files found in {domain_dir}")
     return texts
 
 
-def build_synthetic_training_texts(domain: str) -> List[str]:
-    """Falls back to the synthetic calibration corpus generators when a JSONL
-    split is unavailable (keeps qualification/evaluation splits isolated)."""
-    from run_experiments import build_datasets
-
-    _, calibration_data, _ = build_datasets()
-    if domain not in calibration_data:
-        raise ValueError(
-            f"Unknown domain '{domain}'; expected {sorted(calibration_data)}"
-        )
-    return calibration_data[domain]
-
-
-def train_lineage_expert(
+def train_specialist(
     base_model_id: str,
     domain: str,
     train_texts: List[str],
-    output_dir: str,
-    learning_rate: float = 2e-5,
-    per_device_train_batch_size: int = 8,
-    num_train_epochs: float = 3.0,
-    weight_decay: float = 0.01,
+    output_dir: Path,
+    tokenizer,
+    steps: int,
+    lr: float,
+    seed: int,
     max_length: int = 128,
-    seed: int = 17,
-) -> Dict[str, Any]:
-    """Fine-tunes one lineage-matched specialist expert from the exact base checkpoint."""
-    from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        DataCollatorForLanguageModeling,
-        Trainer,
-        TrainingArguments,
-    )
+    batch_size: int = 4,
+    device: str = "cpu",
+) -> Dict:
+    """Fine-tune a specialist from the base checkpoint."""
+    from transformers import AutoModelForCausalLM
 
     torch.manual_seed(seed)
-
-    tokenizer = AutoTokenizer.from_pretrained(base_model_id)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(base_model_id)
+    model.to(device)
+    model.train()
 
-    class _TextDataset(torch.utils.data.Dataset):
-        def __init__(self, texts: List[str]) -> None:
-            self.encodings = tokenizer(
-                texts,
-                truncation=True,
-                max_length=max_length,
-                padding="max_length",
+    dataset = TextDataset(train_texts, tokenizer, max_length=max_length)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    step = 0
+    total_loss = 0.0
+    while step < steps:
+        for batch in loader:
+            if step >= steps:
+                break
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels,
             )
+            loss = outputs.loss
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            optimizer.zero_grad()
+            total_loss += loss.item()
+            step += 1
+            if step % 50 == 0:
+                avg = total_loss / step
+                print(f"  [{domain}] step {step}/{steps} | avg_loss={avg:.4f}")
 
-        def __len__(self) -> int:
-            return len(self.encodings["input_ids"])
+    # Save
+    out = output_dir / domain
+    out.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(str(out))
+    tokenizer.save_pretrained(str(out))
 
-        def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-            return {
-                key: torch.tensor(values[idx]) for key, values in self.encodings.items()
-            }
+    # Manifest
+    from transformers import AutoConfig
 
-    train_dataset = _TextDataset(train_texts)
-    collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
-    # Fine-tune with low learning rate to guarantee controlled parameter delta
-    training_args = TrainingArguments(
-        output_dir=output_dir,
-        learning_rate=learning_rate,
-        per_device_train_batch_size=per_device_train_batch_size,
-        num_train_epochs=num_train_epochs,
-        weight_decay=weight_decay,
-        save_strategy="no",
-        logging_steps=20,
-        report_to=[],
-        fp16=torch.cuda.is_available(),
-        seed=seed,
-    )
-
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        data_collator=collator,
-    )
-    train_result = trainer.train()
-
-    os.makedirs(output_dir, exist_ok=True)
-    trainer.save_model(output_dir)
-    tokenizer.save_pretrained(output_dir)
+    config = AutoConfig.from_pretrained(base_model_id)
+    base_revision = getattr(config, "_commit_hash", "unknown")
 
     manifest = {
         "base_model": base_model_id,
+        "base_revision": base_revision,
         "domain": domain,
-        "num_train_samples": len(train_texts),
-        "learning_rate": learning_rate,
-        "num_train_epochs": num_train_epochs,
-        "weight_decay": weight_decay,
-        "final_train_loss": float(train_result.training_loss),
         "seed": seed,
+        "steps": steps,
+        "learning_rate": lr,
+        "max_length": max_length,
+        "batch_size": batch_size,
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "final_avg_loss": total_loss / max(steps, 1),
     }
-    with open(os.path.join(output_dir, "lineage_manifest.json"), "w") as f:
+    with open(out / "lineage_manifest.json", "w") as f:
         json.dump(manifest, f, indent=2)
-    print(
-        f"[✓] Lineage expert '{domain}' trained from '{base_model_id}' "
-        f"(final loss {train_result.training_loss:.4f}) -> {output_dir}"
-    )
     return manifest
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Fine-tune lineage-matched specialist experts from the exact base checkpoint."
-    )
-    parser.add_argument("--base-model", type=str, default=DEFAULT_BASE_MODEL)
-    parser.add_argument("--domain", type=str, choices=DEFAULT_DOMAINS)
-    parser.add_argument(
-        "--train-jsonl",
-        type=str,
-        default=None,
-        help="Optional JSONL training split (falls back to synthetic calibration corpus).",
-    )
-    parser.add_argument("--output-dir", type=str, default=None)
-    parser.add_argument("--learning-rate", type=float, default=2e-5)
-    parser.add_argument("--batch-size", type=int, default=8)
-    parser.add_argument("--epochs", type=float, default=3.0)
-    parser.add_argument("--weight-decay", type=float, default=0.01)
-    parser.add_argument(
-        "--all", action="store_true", help="Train experts for all domains sequentially."
-    )
+def main():
+    parser = argparse.ArgumentParser(description="Train same-lineage specialist experts")
+    parser.add_argument("--base-model", default="distilgpt2", help="HuggingFace base model ID")
+    parser.add_argument("--output-dir", default="checkpoints", help="Output directory for experts")
+    parser.add_argument("--domains", nargs="+", default=["math", "planning", "coding"])
+    parser.add_argument("--train-data", default="data/train", help="Root dir with per-domain subdirs")
+    parser.add_argument("--steps", type=int, default=500)
+    parser.add_argument("--lr", type=float, default=5e-5)
+    parser.add_argument("--seed", type=int, default=23)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--max-length", type=int, default=128)
+    parser.add_argument("--device", default="cpu")
     args = parser.parse_args()
 
-    domains = list(DEFAULT_DOMAINS) if args.all else [args.domain]
-    if domains == [None]:
-        parser.error("Provide --domain <name> or --all.")
+    from transformers import AutoTokenizer
 
-    for domain in domains:
-        if args.train_jsonl and not args.all:
-            train_texts = load_jsonl_texts(args.train_jsonl)
-        else:
-            jsonl_path = os.path.join("data", domain, "calibration.jsonl")
-            if os.path.exists(jsonl_path):
-                train_texts = load_jsonl_texts(jsonl_path)
-            else:
-                train_texts = build_synthetic_training_texts(domain)
-        output_dir = args.output_dir or os.path.join("artifacts", "experts", domain)
-        train_lineage_expert(
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    data_dir = Path(args.train_data)
+
+    tokenizer = AutoTokenizer.from_pretrained(args.base_model)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    all_manifests = []
+    for domain in args.domains:
+        print(f"\n{'='*60}\nTraining specialist for domain: {domain}\n{'='*60}")
+        texts = load_domain_texts(data_dir, domain)
+        data_hash = _hash_training_data(data_dir, domain)
+        manifest = train_specialist(
             base_model_id=args.base_model,
             domain=domain,
-            train_texts=train_texts,
+            train_texts=texts,
             output_dir=output_dir,
-            learning_rate=args.learning_rate,
-            per_device_train_batch_size=args.batch_size,
-            num_train_epochs=args.epochs,
-            weight_decay=args.weight_decay,
+            tokenizer=tokenizer,
+            steps=args.steps,
+            lr=args.lr,
+            seed=args.seed,
+            max_length=args.max_length,
+            batch_size=args.batch_size,
+            device=args.device,
         )
+        manifest["training_data_hash"] = data_hash
+        manifest["tokenizer_hash"] = _hash_str(str(tokenizer))
+        # Re-write manifest with hashes
+        with open(output_dir / domain / "lineage_manifest.json", "w") as f:
+            json.dump(manifest, f, indent=2)
+        all_manifests.append(manifest)
+        print(f"  Saved to {output_dir / domain}")
+
+    # Write global lineage index
+    with open(output_dir / "lineage_index.json", "w") as f:
+        json.dump(
+            {
+                "base_model": args.base_model,
+                "seed": args.seed,
+                "experts": all_manifests,
+            },
+            f,
+            indent=2,
+        )
+    print(f"\nLineage index written to {output_dir / 'lineage_index.json'}")
 
 
 if __name__ == "__main__":

@@ -280,6 +280,92 @@ def _gather_difficulty(
     return gathered
 
 
+def task_arithmetic(
+    deltas: List[Dict[str, Tensor]],
+    coefficients: Optional[List[float]] = None,
+) -> Dict[str, Tensor]:
+    """Task arithmetic: weighted sum of task vectors.
+
+    If coefficients is None, this is plain task arithmetic (sum with c=1).
+    Otherwise each delta is scaled by its coefficient. No softmax is
+    applied -- coefficients are used as-is.
+    """
+    if not deltas:
+        return {}
+    names = deltas[0].keys()
+    if coefficients is None:
+        coefficients = [1.0] * len(deltas)
+    if len(coefficients) != len(deltas):
+        raise ValueError(
+            f"coefficients length {len(coefficients)} != deltas length {len(deltas)}"
+        )
+    return {
+        name: sum(c * d[name] for c, d in zip(coefficients, deltas))
+        for name in names
+    }
+
+
+def mean_task_vector(deltas: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
+    """Task-vector mean: elementwise average of task vectors."""
+    if not deltas:
+        return {}
+    names = deltas[0].keys()
+    N = len(deltas)
+    return {
+        name: (1.0 / N) * sum(d[name] for d in deltas)
+        for name in names
+    }
+
+
+def softmax_weighted_merge(
+    deltas: List[Dict[str, Tensor]],
+    logits: Tensor,
+) -> Dict[str, Tensor]:
+    """Softmax-weighted merge: weights = softmax(logits), then weighted sum."""
+    if not deltas:
+        return {}
+    names = deltas[0].keys()
+    weights = F.softmax(logits.float().reshape(-1), dim=0)
+    if weights.shape[0] != len(deltas):
+        raise ValueError(
+            f"logits length {weights.shape[0]} != deltas length {len(deltas)}"
+        )
+    return {
+        name: sum(weights[i] * deltas[i][name] for i in range(len(deltas)))
+        for name in names
+    }
+
+
+def convex_weighted_merge(
+    deltas: List[Dict[str, Tensor]],
+    weights: Tensor,
+) -> Dict[str, Tensor]:
+    """Convex weighted merge: weights supplied directly (>= 0, sum to 1).
+
+    Does NOT apply softmax. Use this when the caller has already produced
+    normalized convex weights. Raises if weights violate convexity.
+    """
+    if not deltas:
+        return {}
+    w = weights.float().reshape(-1)
+    if w.shape[0] != len(deltas):
+        raise ValueError(
+            f"weights length {w.shape[0]} != deltas length {len(deltas)}"
+        )
+    if (w < 0).any():
+        raise ValueError("convex weights must be non-negative")
+    total = w.sum().item()
+    if abs(total - 1.0) > 1e-4:
+        raise ValueError(
+            f"convex weights must sum to 1.0; got {total}"
+        )
+    names = deltas[0].keys()
+    return {
+        name: sum(w[i] * deltas[i][name] for i in range(len(deltas)))
+        for name in names
+    }
+
+
 def _normalize_expert_weights(
     memory_bank_weights: Tensor,
     num_experts: int,
@@ -382,8 +468,25 @@ def apply_dare_preprocessing(
     ssm_drop_reduction: float = 0.5,
     policies: Optional[Mapping[str, Any]] = None,
     generator: Optional[torch.Generator] = None,
-    rescale_deltas: bool = False,
+    rescale_deltas: bool = True,
 ) -> Tuple[List[Dict[str, Tensor]], List[Dict[str, Tensor]]]:
+    """DARE preprocessing: drop-and-rescale task vector elements.
+
+    Standard DARE:
+        tilde_Delta = (M ⊙ Delta) / (1 - p)
+    where M is a Bernoulli(1-p) keep mask. The rescaling by 1/(1-p) ensures
+    E[tilde_Delta] ≈ Delta, preserving the expected magnitude of the task
+    vector.
+
+    Set rescale_deltas=False to use plain delta dropout (no rescaling):
+        tilde_Delta = M ⊙ Delta
+    This is a DIFFERENT operation and should be called via
+    apply_delta_dropout() for clarity. See test_dare_preserves_expected_delta.
+
+    Default changed from False to True in Phase 8 of the repair plan:
+    the previous default (False) implemented delta dropout, not DARE,
+    but was named "DARE" throughout the codebase.
+    """
     _validate_probability("dare_base_p", dare_base_p, inclusive_one=False)
     _validate_probability("ssm_drop_reduction", ssm_drop_reduction)
     num_experts = len(task_vectors)
@@ -440,6 +543,31 @@ def apply_dare_preprocessing(
         keep_masks.append(masks)
 
     return processed, keep_masks
+
+
+def apply_delta_dropout(
+    task_vectors: List[Dict[str, Tensor]],
+    difficulty_importance: Optional[Tensor] = None,
+    drop_probability: float = 0.25,
+    ssm_drop_reduction: float = 0.5,
+    policies: Optional[Mapping[str, Any]] = None,
+    generator: Optional[torch.Generator] = None,
+) -> Tuple[List[Dict[str, Tensor]], List[Dict[str, Tensor]]]:
+    """Plain delta dropout (NO rescaling): tilde_Delta = M ⊙ Delta.
+
+    This is a DIFFERENT operation from DARE. E[tilde_Delta] = (1-p) * Delta,
+    so the expected magnitude is reduced. Use apply_dare_preprocessing()
+    (with rescale=True) if you want unbiased DARE.
+    """
+    return apply_dare_preprocessing(
+        task_vectors,
+        difficulty_importance=difficulty_importance,
+        dare_base_p=drop_probability,
+        ssm_drop_reduction=ssm_drop_reduction,
+        policies=policies,
+        generator=generator,
+        rescale_deltas=False,  # plain dropout, no 1/(1-p) rescaling
+    )
 
 
 def difficulty_weighted_ties_merge(
@@ -1385,6 +1513,9 @@ class DAPHConfig:
     # Opt-in continuous decay of the SSM state on bypassed steps (0.0 =
     # exact preservation, the bit-exact guarantee from the drift fix).
     ssm_bypass_decay: float = 0.0
+    # When True, router/logit paths raise FloatingPointError on non-finite
+    # values. Intended for debug / correctness runs; disable for speed.
+    assert_numerics: bool = False
 
     def __post_init__(self) -> None:
         if self.hidden_size <= 0 or self.intermediate_size <= 0:
@@ -1422,8 +1553,31 @@ class DAPHConfig:
                 raise ValueError(f"{name} must be positive when provided")
 
 
-class SparseSequenceDispatch(nn.Module):
-    """Sparse token gather/scatter wrapper for sequence-dependent paths."""
+class PointwiseSparseDispatch(nn.Module):
+    """Sparse token gather/scatter wrapper for POINTWISE paths only.
+
+    A "pointwise" path is one where each token's output depends only on that
+    token's own hidden state (and per-token difficulty if applicable). The
+    output for token (b, t) is independent of every other token, so it is
+    legal to gather the active subset, compute it as a flat batch of
+    single-token sequences, and scatter back.
+
+    ALLOWED through this dispatch:
+      - FFN / SwiGLU / simple projection
+      - token-local symbolic operation
+      - CheapPath
+
+    FORBIDDEN (use SequencePathExecutor instead):
+      - Mamba / SSM / any recurrence
+      - attention
+      - temporal convolution with cross-token dependency
+
+    Passing a recurrent or sequence-dependent operator through this dispatch
+    is a correctness bug: it (a) leaks state across batch elements and
+    (b) silently compresses temporal gaps. See Phase 1 of the repair plan
+    and tests test_sparse_mamba_no_cross_batch_leakage /
+    test_sparse_mamba_matches_masked_dense_reference.
+    """
 
     @staticmethod
     def gather_active_tokens(
@@ -1471,6 +1625,34 @@ class SparseSequenceDispatch(nn.Module):
         if b_idx.numel() > 0:
             output[b_idx, t_idx] = sparse_output.squeeze(0)
         return output
+
+
+class SequencePathExecutor:
+    """Marker / documentation contract for sequence-dependent path execution.
+
+    Sequence paths (Mamba/SSM, attention, temporal convolutions) MUST be run
+    on the full [B, L, H] tensor with the active_mask passed through to the
+    operator so that inactive steps either preserve state exactly
+    (bypass_decay=0.0) or decay (bypass_decay>0). They MUST NOT be routed
+    through PointwiseSparseDispatch, which would (a) leak state across batch
+    elements and (b) compress temporal gaps.
+
+    This class exists to make the distinction structural and greppable. It
+    holds no state; it is a contract that the caller (DAPHHybridDecoderLayer)
+    honors by always invoking sequence-path modules with the full sequence
+    plus mask.
+    """
+
+    ALLOWED_OPERATORS = ("mamba", "ssm", "attention", "temporal_conv")
+
+    @staticmethod
+    def validate_operator(operator_name: str) -> None:
+        if operator_name.lower() not in SequencePathExecutor.ALLOWED_OPERATORS:
+            raise ValueError(
+                f"SequencePathExecutor received non-sequence operator "
+                f"'{operator_name}'. Pointwise operators must use "
+                f"PointwiseSparseDispatch, not the sequence executor."
+            )
 
 
 class DAPHHybridDecoderLayer(nn.Module):
@@ -1662,33 +1844,23 @@ class DAPHHybridDecoderLayer(nn.Module):
             )
 
         if self.MAMBA_PATH in required or use_cache:
-            if mamba_mask is not None and not mamba_mask.all() and not use_cache:
-                active_mask = mamba_mask.bool()
-                sparse_x, b_idx, t_idx = SparseSequenceDispatch.gather_active_tokens(
-                    hidden_states, active_mask
-                )
-                if b_idx.numel() > 0:
-                    sparse_out, next_mamba_state = self.mamba_exfusion(
-                        sparse_x,
-                        difficulty_metrics=None,
-                        state=mamba_state,
-                        return_state=use_cache,
-                        mask=None,
-                    )
-                    mamba_output = SparseSequenceDispatch.scatter_active_tokens(
-                        sparse_out, b_idx, t_idx, hidden_states.shape
-                    )
-                else:
-                    mamba_output = torch.zeros_like(hidden_states)
-                    next_mamba_state = None
-            else:
-                mamba_output, next_mamba_state = self.mamba_exfusion(
-                    hidden_states,
-                    difficulty_metrics,
-                    state=mamba_state,
-                    return_state=use_cache,
-                    mask=mamba_mask,
-                )
+            # NOTE(P0 correctness): The Mamba/SSM path is a recurrent,
+            # sequence-dependent operator. It MUST run on the full [B, L, H]
+            # sequence with the active_mask passed into the SSM so that
+            # inactive tokens either preserve state exactly (bypass_decay=0.0)
+            # or decay (bypass_decay>0). Gathering sparse tokens across
+            # batch elements and time positions into a single concatenated
+            # sequence is illegal for recurrence: it leaks state across
+            # batches and silently compresses temporal gaps. See
+            # test_sparse_mamba_no_cross_batch_leakage and
+            # test_sparse_mamba_matches_masked_dense_reference.
+            mamba_output, next_mamba_state = self.mamba_exfusion(
+                hidden_states,
+                difficulty_metrics,
+                state=mamba_state,
+                return_state=use_cache,
+                mask=mamba_mask,
+            )
             if self.MAMBA_PATH in required:
                 outputs[self.MAMBA_PATH] = mamba_output
 
@@ -1824,6 +1996,10 @@ class DAPHHybridDecoderLayer(nn.Module):
                     token_selector = selected.eq(path)  # [B, L]
                     if not token_selector.any():
                         continue
+                    # PointwiseSparseDispatch is legal here: Trans-ExFusion
+                    # (FFN) and CheapPath are token-local operators with no
+                    # recurrence and no cross-token dependency. Do NOT route
+                    # Mamba/attention through this dispatch.
                     b_idx, t_idx = torch.where(token_selector)
                     sparse_tokens = hidden_states[b_idx, t_idx].unsqueeze(1)
                     sparse_dm = _gather_difficulty(
@@ -2048,11 +2224,14 @@ def merge_expert_family(
     if not experts:
         return {}
     policy = {**DEFAULT_MAMBA_POLICIES, **dict(policies or {})}
-    weights = _normalize_expert_weights(
-        memory_bank_weights,
-        len(experts),
-        difficulty_importance,
-    )
+    # NOTE(P7 baseline-semantics): Do NOT pre-softmax the weights here.
+    # Each merge mode has its own semantics:
+    #   - task_arithmetic / parameter_average: ignore weights entirely
+    #   - weighted_task_arithmetic: use RAW coefficients (no softmax)
+    #   - logit_weighted: apply softmax inside the merge function
+    # The old code called _normalize_expert_weights (softmax) before the
+    # dispatch, which silently turned weighted_task_arithmetic into a
+    # softmax-weighted merge. See test_weighted_arithmetic_does_not_softmax.
 
     task_vectors = extract_task_vectors(experts, base_model)
 
@@ -2084,32 +2263,28 @@ def merge_expert_family(
         N = len(task_vectors)
 
         if merge_mode == MergeMode.PARAMETER_AVERAGE.value:
-            # Simple unweighted parameter average of task vectors
-            merged = {
-                name: (1.0 / N) * sum(task_vectors[i][name] for i in range(N))
-                for name in names
-            }
+            # Task-vector mean: elementwise average (no weights, no softmax)
+            merged = mean_task_vector(task_vectors)
         elif merge_mode == MergeMode.TASK_ARITHMETIC.value:
-            # Direct sum of task vectors (Task Arithmetic)
-            merged = {
-                name: sum(task_vectors[i][name] for i in range(N)) for name in names
-            }
+            # Task arithmetic: direct sum with coefficient 1 (no softmax)
+            merged = task_arithmetic(task_vectors)
         elif merge_mode in (
             MergeMode.WEIGHTED_TASK_ARITHMETIC.value,
             MergeMode.WEIGHTED_AVERAGE.value,
         ):
-            # Explicitly weighted task arithmetic using provided coefficients (no softmax)
-            merged = {
-                name: sum(weights[i] * task_vectors[i][name] for i in range(N))
-                for name in names
-            }
+            # Weighted task arithmetic: RAW coefficients, NO softmax.
+            # The caller supplies explicit coefficients; do not infer
+            # softmax semantics from their numeric values.
+            raw_weights = memory_bank_weights.float().reshape(-1)
+            if raw_weights.shape[0] != N:
+                raise ValueError(
+                    f"weights length {raw_weights.shape[0]} != expert count {N}"
+                )
+            coefficients = [float(raw_weights[i]) for i in range(N)]
+            merged = task_arithmetic(task_vectors, coefficients=coefficients)
         elif merge_mode == MergeMode.LOGIT_WEIGHTED.value:
-            # Explicit softmax-normalized weights over weight_logits
-            logit_weights = F.softmax(memory_bank_weights, dim=-1)
-            merged = {
-                name: sum(logit_weights[i] * task_vectors[i][name] for i in range(N))
-                for name in names
-            }
+            # Softmax-weighted merge: weights = softmax(logits)
+            merged = softmax_weighted_merge(task_vectors, memory_bank_weights)
 
         if apply_to is not None:
             _apply_delta_to_module(

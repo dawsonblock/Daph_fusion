@@ -7,6 +7,7 @@ over base model and possess compatible parameter topology and tokenizers.
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -42,6 +43,17 @@ class ExpertQualification:
 
 class InvalidExperiment(Exception):
     """Raised when one or more experts fail preflight qualification."""
+
+    pass
+
+
+class QualificationError(InvalidExperiment):
+    """Raised when an OFFICIAL experiment path encounters unqualified experts.
+
+    This is the hard-fail exception for the official/research benchmark path.
+    Debug-mode runs may proceed past qualification but must tag their
+    artifacts as ``official: false``.
+    """
 
     pass
 
@@ -152,6 +164,44 @@ class ExpertQualificationPipeline:
             rel_imp = 0.0
         else:
             rel_imp = (base_nll - expert_nll) / base_nll
+
+        # Finiteness guards: NaN/inf NLL or parameter norm disqualifies the
+        # expert regardless of the relative-improvement threshold.
+        if not (math.isfinite(base_nll) and math.isfinite(expert_nll)):
+            return ExpertQualification(
+                expert_name=expert_name,
+                expert_revision=expert_revision,
+                domain=domain,
+                base_nll=float(base_nll),
+                expert_nll=float(expert_nll),
+                relative_improvement=float(rel_imp) if math.isfinite(rel_imp) else 0.0,
+                architecture_compatible=True,
+                tokenizer_compatible=True,
+                state_dict_compatible=True,
+                passed=False,
+                rejection_reason=(
+                    f"Non-finite NLL: base={base_nll}, expert={expert_nll}."
+                ),
+            )
+
+        param_norm = sum(
+            float(p.detach().float().norm().item()) ** 2
+            for p in expert_model.parameters()
+        ) ** 0.5
+        if not math.isfinite(param_norm):
+            return ExpertQualification(
+                expert_name=expert_name,
+                expert_revision=expert_revision,
+                domain=domain,
+                base_nll=float(base_nll),
+                expert_nll=float(expert_nll),
+                relative_improvement=float(rel_imp),
+                architecture_compatible=True,
+                tokenizer_compatible=True,
+                state_dict_compatible=True,
+                passed=False,
+                rejection_reason=f"Non-finite parameter norm: {param_norm}.",
+            )
 
         passed = rel_imp >= self.min_expert_improvement
         rejection_reason = (
