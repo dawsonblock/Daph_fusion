@@ -125,19 +125,39 @@ def op_project(
 # =============================================================================
 
 
+def _ties_trim(deltas: List[Tensor], trim_fraction: float) -> List[Tensor]:
+    """Trim: zero out the smallest-magnitude trim_fraction of each delta."""
+    trim = min(max(trim_fraction, 0.0), 0.99)
+    if trim <= 0.0:
+        return list(deltas)
+    trimmed = []
+    for d in deltas:
+        flat = d.abs().flatten()
+        k = int(flat.numel() * trim)
+        if k > 0 and k < flat.numel():
+            threshold = torch.kthvalue(flat, k).values
+            d = torch.where(d.abs() > threshold, d, torch.zeros_like(d))
+        trimmed.append(d)
+    return trimmed
+
+
 def op_ties(
     deltas: List[Tensor],
     trim_fraction: float = 0.2,
+    sign_mode: str = "magnitude",
 ) -> Tensor:
     """TIES: Trim → Elect → Merge.
 
     1. Trim: zero out the smallest-magnitude trim_fraction of each delta
-    2. Elect: for each parameter, choose the sign with greater total magnitude
+    2. Elect: choose the sign per-coordinate via the specified election mode
     3. Merge: average only the deltas whose sign matches the elected sign
 
     Args:
         deltas: List of N tensors, each [..., a, b] (same shape)
-        trim_fraction: Fraction of smallest-magnitude elements to trim (0-1)
+        trim_fraction: Fraction of smallest-magnitude elements to trim (0-1).
+                       trim_fraction=0.2 means remove the bottom 20%.
+        sign_mode: "magnitude" (default) — sign with greater total magnitude wins.
+                   "majority" — sign held by more experts wins (pure count).
 
     Returns:
         Merged tensor of the same shape as each input delta.
@@ -146,37 +166,84 @@ def op_ties(
         raise ValueError("TIES requires at least one delta")
 
     N = len(deltas)
-    stacked = torch.stack(deltas, dim=0)  # [N, ...]
-
-    # 1. Trim: zero out smallest-magnitude elements per delta
-    # (applies even for N=1; election/merge are trivial for N=1)
-    trim = min(max(trim_fraction, 0.0), 0.99)
-    if trim > 0.0:
-        trimmed = []
-        for i in range(N):
-            d = deltas[i]
-            flat = d.abs().flatten()
-            k = int(flat.numel() * trim)
-            if k > 0 and k < flat.numel():
-                threshold = torch.kthvalue(flat, k).values
-                d = torch.where(d.abs() > threshold, d, torch.zeros_like(d))
-            trimmed.append(d)
-        stacked = torch.stack(trimmed, dim=0)
+    trimmed = _ties_trim(deltas, trim_fraction)
+    stacked = torch.stack(trimmed, dim=0)  # [N, ...]
 
     if N == 1:
         return stacked[0]
 
-    # 2. Elect: sign with greater total magnitude
-    total_pos = (stacked * (stacked > 0).to(stacked.dtype)).sum(dim=0)
-    total_neg = (-stacked * (stacked < 0).to(stacked.dtype)).sum(dim=0)
-    elected_sign = torch.where(total_pos >= total_neg, 1.0, -1.0)
+    # 2. Elect
+    if sign_mode == "majority":
+        # Pure sign counting: s_k = sign(Σ_i sign(Δ_{i,k}))
+        signs = stacked.sign()  # +1, -1, or 0
+        vote_sum = signs.sum(dim=0)
+        elected_sign = torch.where(vote_sum > 0, 1.0,
+                          torch.where(vote_sum < 0, -1.0, 0.0))
+    else:
+        # Magnitude-based: sign with greater total accumulated magnitude
+        total_pos = (stacked * (stacked > 0).to(stacked.dtype)).sum(dim=0)
+        total_neg = (-stacked * (stacked < 0).to(stacked.dtype)).sum(dim=0)
+        elected_sign = torch.where(total_pos >= total_neg, 1.0, -1.0)
 
-    # 3. Merge: average only matching-sign entries
+    # 3. Merge: average only matching-sign entries (disjoint merge)
     matching = (stacked * elected_sign.unsqueeze(0) > 0).to(stacked.dtype)
     count = matching.sum(dim=0).clamp(min=1)
     merged = (stacked * matching).sum(dim=0) / count
 
     return merged
+
+
+def op_ties_fisher(
+    deltas: List[Tensor],
+    fisher_diagonals: List[Tensor],
+    trim_fraction: float = 0.2,
+    fisher_gamma: float = 0.5,
+    sign_mode: str = "magnitude",
+    eps: float = 1e-8,
+) -> Tensor:
+    """TIES → Fisher-weighted disjoint merge (ExFusion-F core).
+
+    1. Trim each delta independently
+    2. Elect sign across experts (magnitude or majority mode)
+    3. Among agreeing experts, weight by Fisher curvature: w_i = F_i^γ / Σ_j F_j^γ
+
+    This is the correct composition: TIES resolves conflict, Fisher weights
+    importance among the agreeing survivors.
+    """
+    if not deltas:
+        raise ValueError("TIES-Fisher requires at least one delta")
+    if len(deltas) != len(fisher_diagonals):
+        raise ValueError(
+            f"deltas count {len(deltas)} != fisher count {len(fisher_diagonals)}"
+        )
+
+    N = len(deltas)
+    trimmed = _ties_trim(deltas, trim_fraction)
+    stacked = torch.stack(trimmed, dim=0)
+
+    if N == 1:
+        return stacked[0]
+
+    # 2. Elect sign
+    if sign_mode == "majority":
+        signs = stacked.sign()
+        vote_sum = signs.sum(dim=0)
+        elected_sign = torch.where(vote_sum > 0, 1.0,
+                          torch.where(vote_sum < 0, -1.0, 0.0))
+    else:
+        total_pos = (stacked * (stacked > 0).to(stacked.dtype)).sum(dim=0)
+        total_neg = (-stacked * (stacked < 0).to(stacked.dtype)).sum(dim=0)
+        elected_sign = torch.where(total_pos >= total_neg, 1.0, -1.0)
+
+    # 3. Fisher-weighted disjoint merge
+    matching = (stacked * elected_sign.unsqueeze(0) > 0).to(stacked.dtype)  # [N, ...]
+    fisher_stack = torch.stack(
+        [f.clamp(min=0).pow(fisher_gamma) for f in fisher_diagonals], dim=0
+    )  # [N, ...]
+    weighted = stacked * fisher_stack  # [N, ...]
+    num = (weighted * matching).sum(dim=0)
+    den = (fisher_stack * matching).sum(dim=0) + eps
+    return num / den
 
 
 def op_fisher_weighted(
@@ -279,7 +346,7 @@ def normalize_clipped_norm(
 
 
 SINGLE_EXPERT_OPS = {"RAW", "NORMALIZED", "DARE", "DELTA_DROPOUT", "PROJECT"}
-CROSS_EXPERT_OPS = {"TIES", "FISHER"}
+CROSS_EXPERT_OPS = {"TIES", "TIES_MAGNITUDE", "TIES_MAJORITY", "FISHER", "TIES_FISHER", "DARE_TIES", "DARE_TIES_FISHER"}
 
 
 def transform_single_delta(
@@ -304,7 +371,8 @@ def transform_single_delta(
         return op_project(delta, conflict_subspace=conflict_subspace)
     raise ValueError(
         f"Single-expert operator '{operator}' not recognized. "
-        f"Cross-expert operators (TIES, FISHER) must use transform_expert_set()."
+        f"Cross-expert operators (TIES, FISHER, TIES_FISHER, etc.) must use "
+        f"transform_expert_set()."
     )
 
 
@@ -318,21 +386,48 @@ def transform_expert_set(
     dare_drop: float = 0.2,
     target_scale: float = 1.0,
     conflict_subspace: Optional[Tensor] = None,
+    sign_mode: str = "magnitude",
 ) -> Tensor:
     """Apply a cross-expert operator to the full set of deltas for a layer.
 
     For single-expert operators (RAW, NORMALIZED, DARE, PROJECT), this
     applies the operator to each delta independently and returns the sum.
-    For cross-expert operators (TIES, FISHER), it applies the joint
-    operation and returns a single merged delta.
+    For cross-expert operators (TIES, FISHER, TIES_FISHER, DARE_TIES,
+    DARE_TIES_FISHER), it applies the joint operation and returns a single
+    merged delta.
     """
     op = operator.upper()
-    if op == "TIES":
-        return op_ties(deltas, trim_fraction=trim_fraction)
+    if op in ("TIES", "TIES_MAGNITUDE"):
+        return op_ties(deltas, trim_fraction=trim_fraction, sign_mode="magnitude")
+    if op == "TIES_MAJORITY":
+        return op_ties(deltas, trim_fraction=trim_fraction, sign_mode="majority")
     if op == "FISHER":
         if fisher_diagonals is None:
             raise ValueError("FISHER operator requires fisher_diagonals")
         return op_fisher_weighted(deltas, fisher_diagonals, gamma=fisher_gamma)
+    if op == "TIES_FISHER":
+        if fisher_diagonals is None:
+            raise ValueError("TIES_FISHER operator requires fisher_diagonals")
+        return op_ties_fisher(
+            deltas, fisher_diagonals,
+            trim_fraction=trim_fraction, fisher_gamma=fisher_gamma,
+            sign_mode=sign_mode,
+        )
+    if op == "DARE_TIES":
+        gen = generator or torch.Generator()
+        dare_deltas = [op_dare(d, drop_probability=dare_drop, generator=gen) for d in deltas]
+        return op_ties(dare_deltas, trim_fraction=trim_fraction, sign_mode=sign_mode)
+    if op == "DARE_TIES_FISHER":
+        if fisher_diagonals is None:
+            raise ValueError("DARE_TIES_FISHER operator requires fisher_diagonals")
+        gen = generator or torch.Generator()
+        dare_deltas = [op_dare(d, drop_probability=dare_drop, generator=gen) for d in deltas]
+        dare_fishers = [f for f in fisher_diagonals]
+        return op_ties_fisher(
+            dare_deltas, dare_fishers,
+            trim_fraction=trim_fraction, fisher_gamma=fisher_gamma,
+            sign_mode=sign_mode,
+        )
     # Single-expert ops: apply per-delta and sum
     transformed = [
         transform_single_delta(

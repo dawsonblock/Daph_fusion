@@ -1,77 +1,105 @@
 # DAPH ExFusion — Known Limitations
 
-Open defects and limitations as of v2.5.0-enhanced.
+Open defects and limitations as of v2.6.0-experimental-truth.
 
 ## Blockers for paper-ready release
 
-**None.** All five release gates (P0-P4) and all four CI gates
-(runtime, research, merge, agx) pass. `artifacts/release_status.json` has
-`paper_ready = true`. The previously open blockers have been resolved:
+### 1. AGX-S search not executed — OPEN
 
-### 1. No lineage-matched experts trained — RESOLVED
+The `LayerwiseGeometrySearchEngine` is repaired (cross-expert dispatch,
+CKA mask fix) and `search_geometry.py` runs the real engine. However, no
+full end-to-end AGX-S search has been run on the trained experts. AGX-H
+(heuristic) is benchmarked but performs poorly (0.5844 retention).
 
-Three same-lineage specialists (math, planning, coding) are fine-tuned from
-the exact same distilgpt2 checkpoint (500 steps, lr 5e-5, seed 23) with
-structured `lineage_manifest.json` provenance under `checkpoints/<domain>/`.
-All three pass fail-closed qualification with relative improvement
-I_i >= 0.60 (threshold 0.05). See `artifacts/qualification_report.json`.
+**To resolve**: run `python search_geometry.py --num-candidates 64` and
+evaluate the selected candidate on the test split.
 
-### 2. Dataset near-duplicates — RESOLVED
+### 2. Checkpoints not in archive — OPEN
 
-`scripts/generate_diverse_data.py` now clusters near-duplicate records into
-a single split via union-find on MinHash Jaccard signatures (threshold 0.8,
-matching the audit), so templated variants never span splits. The dataset
-audit reports `exact_overlap_total = 0` and
-`near_duplicate_threshold_pass = true`.
+`checkpoints/` is gitignored (model weights are too large for git). The
+archive contains lineage manifests but not the actual safetensors files.
+This prevents independent regeneration of results from the ZIP alone.
 
-### 3. No train split exists — RESOLVED
+**To resolve**: publish checkpoints to HuggingFace Hub and record the
+model IDs + commit hashes in the provenance manifest.
 
-200 samples/domain are present across all 5 splits
-(train, qualification, calibration, validation, test).
+### 3. Results need independent regeneration — OPEN
 
-### 4. 5-seed final experiment not executed — RESOLVED
+Current numbers were produced on one CPU-only machine. They should be
+regenerated from published checkpoints with full provenance manifests
+including git commit, torch version, training config, and split hashes.
 
-Seeds (11, 23, 37, 51, 73) with 10,000-resample sample-level bootstrap CIs,
-scale sweep, DARE/TIES/Fisher hyperparameter optimization, per-expert lambda
-optimization, and a held-out general-domain base-regression measurement.
-See `artifacts/experiment_results.json`, `artifacts/method_statistics.json`,
-and `RESULTS.md`. Final held-out test evaluation runs once after config freeze
-(`artifacts/test_results.json`).
+## Resolved in v2.6
 
-### 5. Surrogate has no search history — NOT A BLOCKER
+### Fake Fisher → real empirical Fisher — RESOLVED
 
-`TreeSurrogatePredictor` is implemented and unit-tested. It becomes active
-for `constrained_expected_improvement` acquisition once enough AGX search
-trajectories are logged in `artifacts/geometry_history/`. Until then it is
-infrastructure-only and does not block release.
+The experiment runner now uses `CurvatureBank` which computes true
+F = (1/N) Σ (∂L/∂θ)² via per-sample gradients on calibration data.
+The old `delta.abs().pow(2)` fake Fisher is removed.
+
+### ExFusion single-vector TIES → real cross-expert DARE-TIES-Fisher — RESOLVED
+
+ExFusion now uses `op_ties_fisher`: DARE → TIES sign election across
+experts → Fisher-weighted disjoint merge among survivors. The old
+`op_ties([single_merged_vector])` that bypassed cross-expert election
+is eliminated.
+
+### AGX cross-expert ops silently RAW → real dispatch — RESOLVED
+
+`apply_layer_merge_operator` now calls `transform_expert_set()` for
+TIES/FISHER/TIES_FISHER, so candidates labeled "TIES" actually execute
+TIES, not RAW task arithmetic.
+
+### AGX CKA attention-mask dict bug — RESOLVED
+
+Fixed `getattr(dict, "attention_mask", None)` → `dict.get("attention_mask")`.
+
+### DARE RNG reset per-parameter → persistent generator — RESOLVED
+
+The generator is now created once and consumed continuously across all
+parameters, eliminating structured correlation between DARE masks.
+
+### TIES semantics inconsistent → both variants explicit — RESOLVED
+
+`TIES_MAGNITUDE` (magnitude-based election) and `TIES_MAJORITY` (pure
+sign counting) are separate operators, benchmarked independently.
+
+### Bootstrap over seeds not samples → per-sample bootstrap — RESOLVED
+
+CIs now resample individual evaluation samples. Deterministic methods
+run once; stochastic methods (DARE) run across 5 seeds with per-sample
+bootstrap pooling.
+
+### search_geometry.py hardcoded → real engine — RESOLVED
+
+`search_geometry.py` now executes `LayerwiseGeometrySearchEngine`.
+
+### No canonical merge API → daph_exfusion/merge/pipeline.py — RESOLVED
+
+All merges go through `merge_experts()` with `MergeConfig` and produce
+`operator_trace` for provenance.
+
+### Release metadata v2.4/v2.5 inconsistent → v2.6 unified — RESOLVED
+
+All artifacts now use `v2.6.0-experimental-truth`.
 
 ## Architectural limitations
 
 ### SubwordSequenceBridge is CPU-only
 
-`SubwordSequenceBridge` uses Python ThreadPoolExecutor + tokenizer
-round-trips. It is classified as:
-- `backend = "cpu_compatibility"`
-- `compile_safe = false`
-- `cuda_graph_safe = false`
-- `production_default = false`
+For production, use `CandidateVocabularyRouter` instead.
 
-For production, use `CandidateVocabularyRouter` instead (reduces symbolic
-execution from O(BLVH) to O(BLKH)).
+### K-FAC not implemented
 
-### AGX search not yet run end-to-end
+Diagonal Fisher is used. K-FAC (structured curvature) is described in the
+repair plan but not yet implemented.
 
-All AGX infrastructure (operators, groupwise search, Pareto, halving,
-surrogate, acquisition, geometry policy) is implemented and unit-tested,
-but no full end-to-end layerwise/groupwise geometry search has been executed
-on the trained experts. The enhanced experiment uses a parameterized AGX
-operator selection heuristic; a full `LayerwiseGeometrySearchEngine` run
-under CKA representation-drift bounds remains future work.
+### AGX layer-family-specific search
+
+The infrastructure supports layer-family partitioning (attention, SSM,
+FFN, norm, embeddings) but the current search uses uniform candidate
+generation across all layers.
 
 ### Triton selective-scan bindings are GPU-only
 
-`dispatch_selective_scan` routes to `mamba_ssm.ops.selective_scan_fn` only
-in CUDA environments. On CPU (and on this machine, which has no CUDA), the
-fallback path is used. Mixed-precision (FP16/BF16) state management is
-validated in the test suite but is not exercised here because the host lacks
-a CUDA device.
+Validated in tests but not exercised on this CPU-only host.

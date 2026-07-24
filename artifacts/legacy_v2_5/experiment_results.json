@@ -1,0 +1,1124 @@
+{
+  "base_nlls": {
+    "math": 4.831810482280788,
+    "planning": 4.405542659079944,
+    "coding": 3.6462496495902497,
+    "general": 4.374767546958112
+  },
+  "expert_nlls": {
+    "math": 0.9145921619172922,
+    "planning": 0.472691443074061,
+    "coding": 1.0931471396739814
+  },
+  "seeds": [
+    11,
+    23,
+    37,
+    51,
+    73
+  ],
+  "methods": [
+    "base",
+    "expert_specialists",
+    "task_arithmetic",
+    "mean_merge",
+    "TIES",
+    "DARE",
+    "Fisher",
+    "DARE_TIES",
+    "ExFusion",
+    "AGX",
+    "weighted_task_arithmetic"
+  ],
+  "all_experts_qualified": true,
+  "all_metrics_valid": true,
+  "official": true,
+  "n_samples_per_domain": 50,
+  "optimal_scales": {
+    "task_arithmetic": 0.6,
+    "mean_merge": 1.0,
+    "DARE": 0.6,
+    "TIES": 1.0,
+    "DARE_TIES": 1.0,
+    "Fisher": 1.0,
+    "ExFusion": 1.0,
+    "AGX": 0.6
+  },
+  "optimal_params": {
+    "task_arithmetic": {
+      "scale": 0.6,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 0.5,
+      "best_retention": 0
+    },
+    "mean_merge": {
+      "scale": 1.0,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 0.5,
+      "best_retention": 0
+    },
+    "DARE": {
+      "scale": 0.6,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 0.5,
+      "best_retention": 0.8407359276089122
+    },
+    "TIES": {
+      "scale": 1.0,
+      "dare_p": 0.1,
+      "ties_trim": 0.5,
+      "fisher_gamma": 0.5,
+      "best_retention": 0.8311074112328495
+    },
+    "DARE_TIES": {
+      "scale": 1.0,
+      "dare_p": 0.2,
+      "ties_trim": 0.5,
+      "fisher_gamma": 0.5,
+      "best_retention": 0.8264424149115377
+    },
+    "Fisher": {
+      "scale": 1.0,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 1.0,
+      "best_retention": 0.829050576285392
+    },
+    "ExFusion": {
+      "scale": 1.0,
+      "dare_p": 0.2,
+      "ties_trim": 0.1,
+      "fisher_gamma": 1.0,
+      "best_retention": 0.8344660853996815
+    },
+    "AGX": {
+      "scale": 0.6,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 0.5,
+      "best_retention": 0
+    }
+  },
+  "optimal_lambdas": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "per_seed_results": {
+    "base": [
+      {
+        "seed": 11,
+        "method": "base",
+        "per_domain_nll": {
+          "math": 4.831810482280788,
+          "planning": 4.405542659079944,
+          "coding": 3.6462496495902497
+        },
+        "per_domain_retention": {
+          "math": 0.0,
+          "planning": 0.0,
+          "coding": 0.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 3.833156108856201,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "base",
+        "per_domain_nll": {
+          "math": 4.831810482280788,
+          "planning": 4.405542659079944,
+          "coding": 3.6462496495902497
+        },
+        "per_domain_retention": {
+          "math": 0.0,
+          "planning": 0.0,
+          "coding": 0.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 3.833156108856201,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "base",
+        "per_domain_nll": {
+          "math": 4.831810482280788,
+          "planning": 4.405542659079944,
+          "coding": 3.6462496495902497
+        },
+        "per_domain_retention": {
+          "math": 0.0,
+          "planning": 0.0,
+          "coding": 0.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 3.833156108856201,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "base",
+        "per_domain_nll": {
+          "math": 4.831810482280788,
+          "planning": 4.405542659079944,
+          "coding": 3.6462496495902497
+        },
+        "per_domain_retention": {
+          "math": 0.0,
+          "planning": 0.0,
+          "coding": 0.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 3.833156108856201,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "base",
+        "per_domain_nll": {
+          "math": 4.831810482280788,
+          "planning": 4.405542659079944,
+          "coding": 3.6462496495902497
+        },
+        "per_domain_retention": {
+          "math": 0.0,
+          "planning": 0.0,
+          "coding": 0.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 3.833156108856201,
+        "valid": true
+      }
+    ],
+    "expert_specialists": [
+      {
+        "seed": 11,
+        "method": "expert_specialists",
+        "per_domain_nll": {
+          "math": 0.9145921619172922,
+          "planning": 0.472691443074061,
+          "coding": 1.0931471396739814
+        },
+        "per_domain_retention": {
+          "math": 1.0,
+          "planning": 1.0,
+          "coding": 1.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 0.0,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "expert_specialists",
+        "per_domain_nll": {
+          "math": 0.9145921619172922,
+          "planning": 0.472691443074061,
+          "coding": 1.0931471396739814
+        },
+        "per_domain_retention": {
+          "math": 1.0,
+          "planning": 1.0,
+          "coding": 1.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 0.0,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "expert_specialists",
+        "per_domain_nll": {
+          "math": 0.9145921619172922,
+          "planning": 0.472691443074061,
+          "coding": 1.0931471396739814
+        },
+        "per_domain_retention": {
+          "math": 1.0,
+          "planning": 1.0,
+          "coding": 1.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 0.0,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "expert_specialists",
+        "per_domain_nll": {
+          "math": 0.9145921619172922,
+          "planning": 0.472691443074061,
+          "coding": 1.0931471396739814
+        },
+        "per_domain_retention": {
+          "math": 1.0,
+          "planning": 1.0,
+          "coding": 1.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 0.0,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "expert_specialists",
+        "per_domain_nll": {
+          "math": 0.9145921619172922,
+          "planning": 0.472691443074061,
+          "coding": 1.0931471396739814
+        },
+        "per_domain_retention": {
+          "math": 1.0,
+          "planning": 1.0,
+          "coding": 1.0
+        },
+        "base_regression": 0.0,
+        "repr_drift": 0.0,
+        "runtime_s": 0.0,
+        "valid": true
+      }
+    ],
+    "task_arithmetic": [
+      {
+        "seed": 11,
+        "method": "task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.6264079519725032,
+          "planning": 1.1621024523664822,
+          "coding": 2.2589504311022384
+        },
+        "per_domain_retention": {
+          "math": 0.8182853923778345,
+          "planning": 0.8247045282347163,
+          "coding": 0.5433777974443765
+        },
+        "base_regression": 0.5591204737177716,
+        "repr_drift": 0.0006200671195983887,
+        "runtime_s": 3.012624979019165,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.6264079519725032,
+          "planning": 1.1621024523664822,
+          "coding": 2.2589504311022384
+        },
+        "per_domain_retention": {
+          "math": 0.8182853923778345,
+          "planning": 0.8247045282347163,
+          "coding": 0.5433777974443765
+        },
+        "base_regression": 0.5591204737177716,
+        "repr_drift": 0.0006200671195983887,
+        "runtime_s": 3.2165980339050293,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.6264079519725032,
+          "planning": 1.1621024523664822,
+          "coding": 2.2589504311022384
+        },
+        "per_domain_retention": {
+          "math": 0.8182853923778345,
+          "planning": 0.8247045282347163,
+          "coding": 0.5433777974443765
+        },
+        "base_regression": 0.5591204737177716,
+        "repr_drift": 0.0006200671195983887,
+        "runtime_s": 4.875007152557373,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.6264079519725032,
+          "planning": 1.1621024523664822,
+          "coding": 2.2589504311022384
+        },
+        "per_domain_retention": {
+          "math": 0.8182853923778345,
+          "planning": 0.8247045282347163,
+          "coding": 0.5433777974443765
+        },
+        "base_regression": 0.5591204737177716,
+        "repr_drift": 0.0006200671195983887,
+        "runtime_s": 3.417710781097412,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.6264079519725032,
+          "planning": 1.1621024523664822,
+          "coding": 2.2589504311022384
+        },
+        "per_domain_retention": {
+          "math": 0.8182853923778345,
+          "planning": 0.8247045282347163,
+          "coding": 0.5433777974443765
+        },
+        "base_regression": 0.5591204737177716,
+        "repr_drift": 0.0006200671195983887,
+        "runtime_s": 3.4913828372955322,
+        "valid": true
+      }
+    ],
+    "mean_merge": [
+      {
+        "seed": 11,
+        "method": "mean_merge",
+        "per_domain_nll": {
+          "math": 1.969461120658589,
+          "planning": 1.9286296781055152,
+          "coding": 2.287466661950872
+        },
+        "per_domain_retention": {
+          "math": 0.7307096841507137,
+          "planning": 0.6298008353059252,
+          "coding": 0.5322085511106016
+        },
+        "base_regression": 0.04578370802800345,
+        "repr_drift": 0.00016647577285766602,
+        "runtime_s": 3.2081589698791504,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "mean_merge",
+        "per_domain_nll": {
+          "math": 1.969461120658589,
+          "planning": 1.9286296781055152,
+          "coding": 2.287466661950872
+        },
+        "per_domain_retention": {
+          "math": 0.7307096841507137,
+          "planning": 0.6298008353059252,
+          "coding": 0.5322085511106016
+        },
+        "base_regression": 0.04578370802800345,
+        "repr_drift": 0.00016647577285766602,
+        "runtime_s": 2.860949993133545,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "mean_merge",
+        "per_domain_nll": {
+          "math": 1.969461120658589,
+          "planning": 1.9286296781055152,
+          "coding": 2.287466661950872
+        },
+        "per_domain_retention": {
+          "math": 0.7307096841507137,
+          "planning": 0.6298008353059252,
+          "coding": 0.5322085511106016
+        },
+        "base_regression": 0.04578370802800345,
+        "repr_drift": 0.00016647577285766602,
+        "runtime_s": 2.0506691932678223,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "mean_merge",
+        "per_domain_nll": {
+          "math": 1.969461120658589,
+          "planning": 1.9286296781055152,
+          "coding": 2.287466661950872
+        },
+        "per_domain_retention": {
+          "math": 0.7307096841507137,
+          "planning": 0.6298008353059252,
+          "coding": 0.5322085511106016
+        },
+        "base_regression": 0.04578370802800345,
+        "repr_drift": 0.00016647577285766602,
+        "runtime_s": 3.0861101150512695,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "mean_merge",
+        "per_domain_nll": {
+          "math": 1.969461120658589,
+          "planning": 1.9286296781055152,
+          "coding": 2.287466661950872
+        },
+        "per_domain_retention": {
+          "math": 0.7307096841507137,
+          "planning": 0.6298008353059252,
+          "coding": 0.5322085511106016
+        },
+        "base_regression": 0.04578370802800345,
+        "repr_drift": 0.00016647577285766602,
+        "runtime_s": 3.2110960483551025,
+        "valid": true
+      }
+    ],
+    "TIES": [
+      {
+        "seed": 11,
+        "method": "TIES",
+        "per_domain_nll": {
+          "math": 1.6371296350596987,
+          "planning": 1.2882755306724132,
+          "coding": 2.127051206981472
+        },
+        "per_domain_retention": {
+          "math": 0.8155483268863709,
+          "planning": 0.7926226946295107,
+          "coding": 0.5950401273384832
+        },
+        "base_regression": 0.3266923130778928,
+        "repr_drift": 0.0004436969757080078,
+        "runtime_s": 2.5680038928985596,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "TIES",
+        "per_domain_nll": {
+          "math": 1.6371296350596987,
+          "planning": 1.2882755306724132,
+          "coding": 2.127051206981472
+        },
+        "per_domain_retention": {
+          "math": 0.8155483268863709,
+          "planning": 0.7926226946295107,
+          "coding": 0.5950401273384832
+        },
+        "base_regression": 0.3266923130778928,
+        "repr_drift": 0.0004436969757080078,
+        "runtime_s": 3.5896809101104736,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "TIES",
+        "per_domain_nll": {
+          "math": 1.6371296350596987,
+          "planning": 1.2882755306724132,
+          "coding": 2.127051206981472
+        },
+        "per_domain_retention": {
+          "math": 0.8155483268863709,
+          "planning": 0.7926226946295107,
+          "coding": 0.5950401273384832
+        },
+        "base_regression": 0.3266923130778928,
+        "repr_drift": 0.0004436969757080078,
+        "runtime_s": 3.2262678146362305,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "TIES",
+        "per_domain_nll": {
+          "math": 1.6371296350596987,
+          "planning": 1.2882755306724132,
+          "coding": 2.127051206981472
+        },
+        "per_domain_retention": {
+          "math": 0.8155483268863709,
+          "planning": 0.7926226946295107,
+          "coding": 0.5950401273384832
+        },
+        "base_regression": 0.3266923130778928,
+        "repr_drift": 0.0004436969757080078,
+        "runtime_s": 4.00817608833313,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "TIES",
+        "per_domain_nll": {
+          "math": 1.6371296350596987,
+          "planning": 1.2882755306724132,
+          "coding": 2.127051206981472
+        },
+        "per_domain_retention": {
+          "math": 0.8155483268863709,
+          "planning": 0.7926226946295107,
+          "coding": 0.5950401273384832
+        },
+        "base_regression": 0.3266923130778928,
+        "repr_drift": 0.0004436969757080078,
+        "runtime_s": 4.0608789920806885,
+        "valid": true
+      }
+    ],
+    "DARE": [
+      {
+        "seed": 11,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.6506937822121137,
+          "planning": 1.1839452458107556,
+          "coding": 2.245283386517019
+        },
+        "per_domain_retention": {
+          "math": 0.8120856280927137,
+          "planning": 0.8191505949063012,
+          "coding": 0.5487309097977334
+        },
+        "base_regression": 0.5736699078136231,
+        "repr_drift": 0.0006104111671447754,
+        "runtime_s": 3.588371992111206,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.6034557584890394,
+          "planning": 1.1775870787559382,
+          "coding": 2.282524820144827
+        },
+        "per_domain_retention": {
+          "math": 0.8241447016137143,
+          "planning": 0.8207672762160187,
+          "coding": 0.534144173274949
+        },
+        "base_regression": 0.5632958288812141,
+        "repr_drift": 0.000624239444732666,
+        "runtime_s": 2.790450096130371,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.6594879442551946,
+          "planning": 1.1685356085770486,
+          "coding": 2.27751314200306
+        },
+        "per_domain_retention": {
+          "math": 0.8098406263277202,
+          "planning": 0.823068779548271,
+          "coding": 0.5361071489573989
+        },
+        "base_regression": 0.5688609618731523,
+        "repr_drift": 0.0006180405616760254,
+        "runtime_s": 1.9744927883148193,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.6455248109769365,
+          "planning": 1.1696083993073596,
+          "coding": 2.2871614452339033
+        },
+        "per_domain_retention": {
+          "math": 0.8134051795734945,
+          "planning": 0.8227960027074016,
+          "coding": 0.5323280984910077
+        },
+        "base_regression": 0.5821720930254254,
+        "repr_drift": 0.0005921125411987305,
+        "runtime_s": 3.7425360679626465,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "DARE",
+        "per_domain_nll": {
+          "math": 1.6547976926267407,
+          "planning": 1.1705646288366611,
+          "coding": 2.226740815989688
+        },
+        "per_domain_retention": {
+          "math": 0.8110379687388061,
+          "planning": 0.8225528637029538,
+          "coding": 0.555993669696841
+        },
+        "base_regression": 0.5591041897435812,
+        "repr_drift": 0.000628054141998291,
+        "runtime_s": 2.4642319679260254,
+        "valid": true
+      }
+    ],
+    "Fisher": [
+      {
+        "seed": 11,
+        "method": "Fisher",
+        "per_domain_nll": {
+          "math": 1.6778422622083062,
+          "planning": 1.3463467486963703,
+          "coding": 2.0740279076804575
+        },
+        "per_domain_retention": {
+          "math": 0.8051550774376577,
+          "planning": 0.7778570157785999,
+          "coding": 0.6158083100084198
+        },
+        "base_regression": 0.31934429694301875,
+        "repr_drift": 0.0004962682723999023,
+        "runtime_s": 3.6574792861938477,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "Fisher",
+        "per_domain_nll": {
+          "math": 1.6778422622083062,
+          "planning": 1.3463467486963703,
+          "coding": 2.0740279076804575
+        },
+        "per_domain_retention": {
+          "math": 0.8051550774376577,
+          "planning": 0.7778570157785999,
+          "coding": 0.6158083100084198
+        },
+        "base_regression": 0.31934429694301875,
+        "repr_drift": 0.0004962682723999023,
+        "runtime_s": 2.1766622066497803,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "Fisher",
+        "per_domain_nll": {
+          "math": 1.6778422622083062,
+          "planning": 1.3463467486963703,
+          "coding": 2.0740279076804575
+        },
+        "per_domain_retention": {
+          "math": 0.8051550774376577,
+          "planning": 0.7778570157785999,
+          "coding": 0.6158083100084198
+        },
+        "base_regression": 0.31934429694301875,
+        "repr_drift": 0.0004962682723999023,
+        "runtime_s": 2.1595547199249268,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "Fisher",
+        "per_domain_nll": {
+          "math": 1.6778422622083062,
+          "planning": 1.3463467486963703,
+          "coding": 2.0740279076804575
+        },
+        "per_domain_retention": {
+          "math": 0.8051550774376577,
+          "planning": 0.7778570157785999,
+          "coding": 0.6158083100084198
+        },
+        "base_regression": 0.31934429694301875,
+        "repr_drift": 0.0004962682723999023,
+        "runtime_s": 2.485672950744629,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "Fisher",
+        "per_domain_nll": {
+          "math": 1.6778422622083062,
+          "planning": 1.3463467486963703,
+          "coding": 2.0740279076804575
+        },
+        "per_domain_retention": {
+          "math": 0.8051550774376577,
+          "planning": 0.7778570157785999,
+          "coding": 0.6158083100084198
+        },
+        "base_regression": 0.31934429694301875,
+        "repr_drift": 0.0004962682723999023,
+        "runtime_s": 4.813321828842163,
+        "valid": true
+      }
+    ],
+    "DARE_TIES": [
+      {
+        "seed": 11,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.7038574749952404,
+          "planning": 1.3041758775144745,
+          "coding": 2.151527573644995
+        },
+        "per_domain_retention": {
+          "math": 0.7985138308541585,
+          "planning": 0.7885797380138753,
+          "coding": 0.585453216288709
+        },
+        "base_regression": 0.4527104272181199,
+        "repr_drift": 0.0005570650100708008,
+        "runtime_s": 5.996809005737305,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.6843618155563262,
+          "planning": 1.2812392717302554,
+          "coding": 2.2208694058884557
+        },
+        "per_domain_retention": {
+          "math": 0.8034907450428742,
+          "planning": 0.7944117933153501,
+          "coding": 0.5582933854655686
+        },
+        "base_regression": 0.4695343593339633,
+        "repr_drift": 0.0005166530609130859,
+        "runtime_s": 5.4273316860198975,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.7292796534180537,
+          "planning": 1.2877889166535221,
+          "coding": 2.1951393419108403
+        },
+        "per_domain_retention": {
+          "math": 0.7920239759766151,
+          "planning": 0.7927464252239739,
+          "coding": 0.5683713450765437
+        },
+        "base_regression": 0.4749713832477002,
+        "repr_drift": 0.0005720257759094238,
+        "runtime_s": 5.125507831573486,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.730450582877774,
+          "planning": 1.2731137309674696,
+          "coding": 2.210793570013833
+        },
+        "per_domain_retention": {
+          "math": 0.7917250573655097,
+          "planning": 0.7964778620061046,
+          "coding": 0.5622398920533332
+        },
+        "base_regression": 0.4696885482145787,
+        "repr_drift": 0.000534355640411377,
+        "runtime_s": 3.8051791191101074,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "DARE_TIES",
+        "per_domain_nll": {
+          "math": 1.732951908758975,
+          "planning": 1.2933147366992652,
+          "coding": 2.1665865145298877
+        },
+        "per_domain_retention": {
+          "math": 0.7910865109081426,
+          "planning": 0.7913413835017611,
+          "coding": 0.5795549255516924
+        },
+        "base_regression": 0.46549686667076295,
+        "repr_drift": 0.0005613565444946289,
+        "runtime_s": 4.546710014343262,
+        "valid": true
+      }
+    ],
+    "ExFusion": [
+      {
+        "seed": 11,
+        "method": "ExFusion",
+        "per_domain_nll": {
+          "math": 1.7794284538355363,
+          "planning": 1.316095927548805,
+          "coding": 2.1131961037055667
+        },
+        "per_domain_retention": {
+          "math": 0.7792218300873278,
+          "planning": 0.7855488453155147,
+          "coding": 0.600466898579392
+        },
+        "base_regression": 0.4952911114478162,
+        "repr_drift": 0.000658571720123291,
+        "runtime_s": 4.267812013626099,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "ExFusion",
+        "per_domain_nll": {
+          "math": 1.705382928939567,
+          "planning": 1.27904084629231,
+          "coding": 2.157774773641851
+        },
+        "per_domain_retention": {
+          "math": 0.7981244081006713,
+          "planning": 0.7949707835535259,
+          "coding": 0.5830063110145997
+        },
+        "base_regression": 0.49039646261193154,
+        "repr_drift": 0.0006172060966491699,
+        "runtime_s": 4.537780046463013,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "ExFusion",
+        "per_domain_nll": {
+          "math": 1.7713407378698869,
+          "planning": 1.3058521334179223,
+          "coding": 2.159361851447225
+        },
+        "per_domain_retention": {
+          "math": 0.7812864880420826,
+          "planning": 0.7881535190161603,
+          "coding": 0.5823846838769466
+        },
+        "base_regression": 0.49823342203434573,
+        "repr_drift": 0.0006567835807800293,
+        "runtime_s": 4.108043670654297,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "ExFusion",
+        "per_domain_nll": {
+          "math": 1.7746616559406276,
+          "planning": 1.2839716460529247,
+          "coding": 2.150976906360035
+        },
+        "per_domain_retention": {
+          "math": 0.7804387134737167,
+          "planning": 0.7937170367195375,
+          "coding": 0.5856689018253536
+        },
+        "base_regression": 0.5030739181748106,
+        "repr_drift": 0.0006260871887207031,
+        "runtime_s": 3.2028238773345947,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "ExFusion",
+        "per_domain_nll": {
+          "math": 1.7830361680843396,
+          "planning": 1.3022080736318846,
+          "coding": 2.1189975955996396
+        },
+        "per_domain_retention": {
+          "math": 0.7783008412749227,
+          "planning": 0.789080088465624,
+          "coding": 0.5981945683961972
+        },
+        "base_regression": 0.5003367687006071,
+        "repr_drift": 0.0006721019744873047,
+        "runtime_s": 2.440769910812378,
+        "valid": true
+      }
+    ],
+    "AGX": [
+      {
+        "seed": 11,
+        "method": "AGX",
+        "per_domain_nll": {
+          "math": 1.6506931447692286,
+          "planning": 1.183944520927665,
+          "coding": 2.245283222774145
+        },
+        "per_domain_retention": {
+          "math": 0.8120857908211686,
+          "planning": 0.8191507792212042,
+          "coding": 0.5487309739325942
+        },
+        "base_regression": 0.5736692293146987,
+        "repr_drift": 0.0006102919578552246,
+        "runtime_s": 4.245447874069214,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "AGX",
+        "per_domain_nll": {
+          "math": 1.6034559709700011,
+          "planning": 1.1775866800702384,
+          "coding": 2.282525475116323
+        },
+        "per_domain_retention": {
+          "math": 0.824144647370896,
+          "planning": 0.8207673775892155,
+          "coding": 0.5341439167355061
+        },
+        "base_regression": 0.563295871287397,
+        "repr_drift": 0.000624239444732666,
+        "runtime_s": 3.6612470149993896,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "AGX",
+        "per_domain_nll": {
+          "math": 1.6594876786539925,
+          "planning": 1.168535826041976,
+          "coding": 2.2775134694888077
+        },
+        "per_domain_retention": {
+          "math": 0.809840694131243,
+          "planning": 0.8230687242538,
+          "coding": 0.5361070206876773
+        },
+        "base_regression": 0.5688608770607867,
+        "repr_drift": 0.0006180405616760254,
+        "runtime_s": 5.135519981384277,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "AGX",
+        "per_domain_nll": {
+          "math": 1.6455245984959748,
+          "planning": 1.1696081818424324,
+          "coding": 2.287161772719651
+        },
+        "per_domain_retention": {
+          "math": 0.8134052338163128,
+          "planning": 0.8227960580018726,
+          "coding": 0.5323279702212863
+        },
+        "base_regression": 0.5821717961821459,
+        "repr_drift": 0.0005919933319091797,
+        "runtime_s": 4.825459957122803,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "AGX",
+        "per_domain_nll": {
+          "math": 1.6547963115004896,
+          "planning": 1.1705652449872885,
+          "coding": 2.226740815989688
+        },
+        "per_domain_retention": {
+          "math": 0.8110383213171253,
+          "planning": 0.822552707035286,
+          "coding": 0.555993669696841
+        },
+        "base_regression": 0.5591041897435812,
+        "repr_drift": 0.000628054141998291,
+        "runtime_s": 5.181735038757324,
+        "valid": true
+      }
+    ],
+    "weighted_task_arithmetic": [
+      {
+        "seed": 11,
+        "method": "weighted_task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.5511659467811685,
+          "planning": 1.2679085629569662,
+          "coding": 2.2436624139367454
+        },
+        "per_domain_retention": {
+          "math": 0.8374934117011876,
+          "planning": 0.7978013720309232,
+          "coding": 0.5493658128515583
+        },
+        "base_regression": 0.3196569577287113,
+        "repr_drift": 0.0004074573516845703,
+        "runtime_s": 5.017683982849121,
+        "valid": true
+      },
+      {
+        "seed": 23,
+        "method": "weighted_task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.5511659467811685,
+          "planning": 1.2679085629569662,
+          "coding": 2.2436624139367454
+        },
+        "per_domain_retention": {
+          "math": 0.8374934117011876,
+          "planning": 0.7978013720309232,
+          "coding": 0.5493658128515583
+        },
+        "base_regression": 0.3196569577287113,
+        "repr_drift": 0.0004074573516845703,
+        "runtime_s": 3.845879077911377,
+        "valid": true
+      },
+      {
+        "seed": 37,
+        "method": "weighted_task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.5511659467811685,
+          "planning": 1.2679085629569662,
+          "coding": 2.2436624139367454
+        },
+        "per_domain_retention": {
+          "math": 0.8374934117011876,
+          "planning": 0.7978013720309232,
+          "coding": 0.5493658128515583
+        },
+        "base_regression": 0.3196569577287113,
+        "repr_drift": 0.0004074573516845703,
+        "runtime_s": 5.27192497253418,
+        "valid": true
+      },
+      {
+        "seed": 51,
+        "method": "weighted_task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.5511659467811685,
+          "planning": 1.2679085629569662,
+          "coding": 2.2436624139367454
+        },
+        "per_domain_retention": {
+          "math": 0.8374934117011876,
+          "planning": 0.7978013720309232,
+          "coding": 0.5493658128515583
+        },
+        "base_regression": 0.3196569577287113,
+        "repr_drift": 0.0004074573516845703,
+        "runtime_s": 4.089339971542358,
+        "valid": true
+      },
+      {
+        "seed": 73,
+        "method": "weighted_task_arithmetic",
+        "per_domain_nll": {
+          "math": 1.5511659467811685,
+          "planning": 1.2679085629569662,
+          "coding": 2.2436624139367454
+        },
+        "per_domain_retention": {
+          "math": 0.8374934117011876,
+          "planning": 0.7978013720309232,
+          "coding": 0.5493658128515583
+        },
+        "base_regression": 0.3196569577287113,
+        "repr_drift": 0.0004074573516845703,
+        "runtime_s": 5.380465030670166,
+        "valid": true
+      }
+    ]
+  }
+}

@@ -1,11 +1,11 @@
 {
   "frozen_config": {
-    "release": "v2.4.0-correctness",
-    "config_hash": "1f271939b73ca3fe1f289ff753981ce82a1495f14c445ffefe5e83346a43a207",
-    "frozen_at": "2026-07-24T05:42:57.974794+00:00",
+    "release": "v2.6.0-experimental-truth",
+    "config_hash": "c91025e5a4ab464d48d8ea24fc1acc7fdacf4c25fa045eacbad8ce1ef9a3998d",
+    "frozen_at": "2026-07-24T07:08:14.782058+00:00",
     "config": {
       "base_model": "distilgpt2",
-      "best_method": "TIES",
+      "best_method": "task_arithmetic",
       "seeds": [
         11,
         23,
@@ -18,42 +18,44 @@
         "planning",
         "coding"
       ],
-      "merge_scale": 1.0,
+      "merge_scale": 0.5,
       "merge_hyperparameters": {
-        "dare_p": 0.1,
-        "ties_trim": 0.5,
-        "fisher_gamma": 0.5
+        "dare_drop_rate": 0.1,
+        "ties_trim_fraction": 0.2,
+        "fisher_gamma": 0.5,
+        "ties_sign_mode": "magnitude"
       },
-      "optimal_lambdas": [
-        1.0,
-        1.0,
-        1.0
+      "operator_trace": [
+        "TASK_ARITHMETIC"
       ],
       "n_samples_validation": 50
     },
     "test_split_used_during_search": false
   },
-  "best_method": "TIES",
+  "best_method": "task_arithmetic",
+  "operator_trace": [
+    "TASK_ARITHMETIC"
+  ],
   "test_base_nlls": {
-    "math": 4.554555755370659,
-    "planning": 4.574332048793039,
-    "coding": 3.8550574599133896
+    "math": 4.55453173262884,
+    "planning": 4.574308219498503,
+    "coding": 3.855024633514747
   },
   "test_expert_nlls": {
-    "math": 0.8762295078403273,
-    "planning": 0.6221102229135479,
-    "coding": 1.4107647270745551
+    "math": 0.8762266272853128,
+    "planning": 0.6221068787717534,
+    "coding": 1.4107576863149578
   },
   "test_merged_nlls": {
-    "math": 1.6322848692815004,
-    "planning": 1.394104734866205,
-    "coding": 2.6287607714477996
+    "math": 1.5479871659860585,
+    "planning": 1.3841427009262726,
+    "coding": 2.745259465706929
   },
   "test_retention": {
-    "math": 0.7944566874814879,
-    "planning": 0.8046682230998347,
-    "coding": 0.5016979644010775
+    "math": 0.8173722626421419,
+    "planning": 0.8071869936630324,
+    "coding": 0.4540278094744077
   },
-  "test_mean_retention": 0.7002742916608001,
-  "test_worst_retention": 0.5016979644010775
+  "test_mean_retention": 0.6928623552598606,
+  "test_worst_retention": 0.4540278094744077
 }

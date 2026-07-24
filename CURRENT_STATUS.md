@@ -1,123 +1,93 @@
 # DAPH ExFusion — Current Status
 
-> **Release: v2.4.0-correctness**
+> **Release: v2.6.0-experimental-truth**
 > Authoritative status: see `artifacts/release_status.json`
 
-## What currently works (post-repair)
+## What changed in v2.6 (experimental-truth repair)
+
+The v2.5 artifacts claimed `paper_ready=true` but the experiment runner did
+not use the algorithms it claimed to evaluate. v2.6 fixes the
+experiment-to-implementation disconnect:
+
+1. **Canonical merge API** (`daph_exfusion/merge/pipeline.py`): every merge
+   goes through `merge_experts()` with a `MergeConfig` and produces an
+   `operator_trace` for provenance. No more inline "almost-TIES" or
+   "almost-Fisher" implementations.
+2. **Real empirical Fisher**: `CurvatureBank` computes true
+   F = (1/N) Σ (∂L/∂θ)² via per-sample gradients on calibration data.
+   The old `delta.abs().pow(2)` fake Fisher is removed from the experiment path.
+3. **ExFusion = DARE → TIES → Fisher**: `op_ties_fisher` performs TIES sign
+   election across experts, then Fisher-weighted disjoint merge among
+   survivors. The old single-vector `op_ties([merged])` is eliminated.
+4. **Both TIES variants**: `TIES_MAGNITUDE` (magnitude-based election) and
+   `TIES_MAJORITY` (pure sign counting) are explicit, benchmarked separately.
+5. **AGX cross-expert dispatch fixed**: `apply_layer_merge_operator` now
+   calls `transform_expert_set()` for TIES/FISHER/TIES_FISHER, so candidates
+   labeled "TIES" actually execute TIES, not RAW.
+6. **AGX CKA attention-mask fixed**: `dict.get("attention_mask")` instead of
+   `getattr(dict, "attention_mask", None)`.
+7. **DARE RNG fixed**: persistent generator consumed continuously across
+   parameters, not reset per-parameter.
+8. **Per-sample bootstrap**: CIs now resample individual evaluation samples,
+   not 5 seed-level aggregates. Deterministic methods run once; stochastic
+   methods (DARE) run across 5 seeds.
+9. **search_geometry.py**: real `LayerwiseGeometrySearchEngine` execution,
+   not hardcoded results.
+10. **Legacy artifacts frozen**: `artifacts/legacy_v2_5/` preserves the old
+    (incorrect) results with relabeling documentation.
+
+## What currently works
 
 ### P0 — Runtime correctness: PASS
+- Sparse Mamba/SSM, pointwise/sequence separation, FP16/BF16 priors, CKA.
 
-- **Sparse Mamba/SSM**: fixed cross-batch leakage and temporal compression.
-  The SSM path now runs on the full `[B,L,H]` sequence with the active mask
-  passed into the SSM (freeze or decay semantics), never through sparse
-  gather/scatter. See `tests/test_sparse_mamba_correctness.py`.
-- **PointwiseSparseDispatch vs SequencePathExecutor**: structural separation
-  enforced. Pointwise ops (FFN, CheapPath) may use sparse gather; recurrent
-  ops (Mamba, attention) must use the full-sequence executor.
-- **FP16/BF16 symbolic priors**: `clamp_symbolic_priors` prevents
-  `BIAS_FORCE=1e5` from overflowing FP16 into inf/NaN. Mixed-precision test
-  matrix passes for FP32, FP16, BF16.
-- **CKA**: token-observation layout `[B,L,H]→[B*L,H]` with padding masking
-  and degenerate-case guarding via `MetricResult(valid=False)`.
-
-### P1 — Experimental validity: PASS
-
-- **Expert qualification**: fail-closed for official runs. `QualificationError`
-  raised; `DAPH_ALLOW_UNQUALIFIED_EXPERTS` env var no longer overrides the
-  official path. Debug mode proceeds but tags artifacts `official=false`.
-  All three lineage-matched specialists (math, planning, coding) trained from
-  the same distilgpt2 checkpoint qualify with relative improvement I_i >= 0.60
-  (threshold 0.05). See `artifacts/qualification_report.json`.
-- **Finiteness guards**: NaN/inf NLL and parameter norms disqualify experts.
-- **Dataset isolation audit**: `daph_exfusion/data/dataset_audit.py` checks
-  exact and near-duplicate overlap across all 5 splits. Current data has
-  exact overlap = 0 AND near_duplicate_threshold_pass = true (MinHash
-  Jaccard < 0.8 across all split pairs). The generator
-  (`scripts/generate_diverse_data.py`) now clusters near-duplicate components
-  into the same split via union-find on MinHash signatures, so templated
-  variants never span splits.
-- **CI real-data audit**: `scripts/run_ci_gates.py` research gate now runs the
-  canonical audit over the actual `data/` directory (not just synthetic temp
-  data), failing the gate if `pass_release_gate` is false.
-- **Retention**: single canonical `calculate_retention` with no auto-clip.
-  Values >1.0 preserved with `interpretation="merged_outperformed_specialist"`.
-- **Artifact validation**: results JSON includes `all_experts_qualified` and
-  `all_metrics_valid` flags.
+### P1 — Experimental validity: PARTIAL
+- Expert qualification: fail-closed, all 3 experts pass (I_i ≥ 0.60).
+- Dataset isolation: exact overlap = 0, near-duplicate threshold pass = true.
+- CI real-data audit: passes on actual `data/` directory.
+- **Fisher is real**: CurvatureBank with per-sample gradients.
+- **ExFusion is real**: DARE → TIES → Fisher via op_ties_fisher.
+- **Operator traces**: every merge records its execution path.
+- **Blocker**: checkpoints not in archive (gitignored); results need
+  independent regeneration.
 
 ### P2 — Merge algorithm integrity: PASS
-
-- **Merge-baseline semantics**: separate functions for task arithmetic
-  (sum, no softmax), mean, softmax-weighted, and convex-weighted merges.
-  `_normalize_expert_weights` no longer pre-softmaxes weighted-task-arithmetic.
-- **DARE vs delta dropout**: `apply_dare_preprocessing` defaults to
-  `rescale=True` (standard DARE). Separate `apply_delta_dropout` for the
-  non-rescaled variant. AGX operator names `DARE` and `DELTA_DROPOUT` are
-  unambiguous.
-- **Fisher**: unified API `build_fisher_diagonal` with `exact_per_sample`
-  and `microbatch_approximation` modes. Padding fixed (labels set to -100
-  before causal shift).
-- **AGX operators**: all 7 operators (RAW, NORMALIZED, DARE, DELTA_DROPOUT,
-  TIES, FISHER, PROJECT) have real mathematical contracts. No stubs.
-  TIES and FISHER are cross-expert operators via `transform_expert_set`.
+- All 7+ operators (RAW, NORMALIZED, DARE, DELTA_DROPOUT, TIES_MAGNITUDE,
+  TIES_MAJORITY, FISHER, TIES_FISHER, DARE_TIES, DARE_TIES_FISHER, PROJECT)
+  have real mathematical contracts and are tested for equivalence.
 
 ### P3 — AGX implementation: PASS (infrastructure)
+- LayerwiseGeometrySearchEngine with correct cross-expert dispatch.
+- CKA attention mask fixed.
+- search_geometry.py runs real search.
+- **Blocker**: AGX-S search not yet run end-to-end on trained experts.
 
-- **Groupwise search**: `daph_exfusion/search/groupwise.py` with layer-group
-  classification and tied-parameter expansion.
-- **Pareto scoring**: multi-objective Pareto frontier with feasibility
-  filtering and scalar utility.
-- **Successive halving**: 4-stage evaluation (quick screen → full val →
-  multi-seed → final) to reduce compute.
-- **Real surrogate**: `TreeSurrogatePredictor` (ExtraTrees/RF/GBM) that
-  actually uses `y` in `fit()`, with CV diagnostics and usability gate.
-- **Constrained acquisition**: `constrained_expected_improvement` with
-  feasibility probability.
-- **Variable-N geometry policy**: permutation-invariant set encoder
-  supporting arbitrary expert count.
-- **Candidate-vocabulary routing**: `CandidateVocabularyRouter` reduces
-  symbolic execution from O(BLVH) to O(BLKH).
-
-### P4 — Statistical validation: PASS (infrastructure)
-
-- **Bootstrap CI**: 10,000 resamples, sample-level.
-- **Fixed seeds**: (11, 23, 37, 51, 73).
-- **Config freeze**: `freeze_config` + hash verification.
-- **Test-split guard**: runtime guard preventing test-split access during
-  search.
+### P4 — Statistical validation: PASS
+- Per-sample bootstrap (10,000 resamples).
+- Deterministic methods run once (no fake 5-seed replication).
+- Stochastic methods (DARE) run across 5 seeds with per-sample bootstrap.
+- Config freeze + hash verification + test-split guard.
 
 ## What does NOT work yet (blockers for paper-ready)
 
-None. All five release gates are green and `paper_ready = true` in
-`artifacts/release_status.json`. The previously open blockers (no lineage
-experts, dataset near-duplicates, no train split, 5-seed experiment not run,
-surrogate without search history) have been resolved:
-
-1. **Lineage-matched experts trained**: 3 specialists (math, planning, coding)
-   fine-tuned from the same distilgpt2 checkpoint (500 steps, lr 5e-5, seed 23)
-   with structured `lineage_manifest.json` provenance.
-2. **Dataset near-duplicates eliminated**: the generator now clusters
-   near-duplicate components into a single split, and the dataset audit
-   passes with `near_duplicate_threshold_pass = true`.
-3. **Train split present**: 200 samples/domain across all 5 splits.
-4. **5-seed final experiment executed**: seeds (11, 23, 37, 51, 73) with
-   10,000-resample bootstrap CIs, scale sweep, hyperparameter optimization,
-   per-expert lambda optimization, and held-out general-domain base
-   regression measurement. See `artifacts/experiment_results.json` and
-   `RESULTS.md`.
-5. **Surrogate**: `TreeSurrogatePredictor` remains infrastructure-only; it
-   becomes active for acquisition once enough AGX search trajectories are
-   logged in `artifacts/geometry_history/`. This is not a release blocker.
+1. **AGX-S search not executed**: the engine works but no full search has
+   been run on the trained experts. AGX-H (heuristic) is benchmarked but
+   performs poorly (0.5844 retention).
+2. **Checkpoints not in archive**: `checkpoints/` is gitignored. The archive
+   cannot independently regenerate results without the trained expert weights.
+3. **Results need independent regeneration**: the current numbers were
+   produced on one machine; they should be regenerated from published
+   checkpoints with full provenance manifests.
 
 ## Release gate status
 
 ```
 P0 runtime correctness        PASS
-P1 experimental validity      PASS
+P1 experimental validity      PARTIAL (checkpoints not in archive)
 P2 merge algorithm integrity  PASS
-P3 AGX implementation         PASS
+P3 AGX implementation         PASS (infrastructure; AGX-S not run)
 P4 statistical validation     PASS
-CI runtime / research / merge / agx   ALL PASS
+CI runtime / research / merge / agx   ALL PASS (158 tests)
 ```
 
-`paper_ready = true`. Final held-out test evaluation (single pass after config
-freeze): best method TIES, mean retention 0.7003, worst retention 0.5017.
+`paper_ready = false` — this is v2.6 research-candidate, not paper-ready.

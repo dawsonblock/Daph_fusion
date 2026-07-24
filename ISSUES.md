@@ -13,8 +13,17 @@ This document tracks identified open issues, strategic enhancement requests, and
 - **Category**: Performance / Sparse Dispatch
 - **Description**:
   For pointwise paths (`Trans-ExFusion`, `CheapPath`), token-level hard routing uses sparse gather/scatter. However, sequence-dependent paths (`MultiheadAttention`, `MemoryBankExFusionMamba`) previously executed dense linear projections across the entire sequence. Setting $\text{dt}=0$ freezes SSM state updates, but linear projections and memory bandwidth were still consumed for non-routed tokens.
-- **Resolution**:
-  `SparseSequenceDispatch.gather_active_tokens` / `scatter_active_tokens` now wrap the Mamba sequence path inside `DAPHHybridDecoderLayer._path_outputs`: during non-cached hard-routing passes, only routed tokens are gathered into a contiguous batch before the SSM projections execute, and outputs are scattered back to `[B, L, H]`.
+- **Resolution** (v2.6 correction):
+  The previous claim that `SparseSequenceDispatch.gather_active_tokens`
+  wraps the Mamba path was **incorrect and has been retracted**. Gathering
+  active tokens into a contiguous batch before SSM execution would
+  recreate the cross-batch temporal corruption bug (tokens from different
+  batches treated as one contiguous sequence). The correct design — now
+  confirmed in the source code — is that recurrent paths (Mamba, attention)
+  run on the full `[B,L,H]` sequence with an active mask passed into the
+  SSM, never through sparse gather/scatter. Only pointwise paths (FFN,
+  CheapPath) use sparse gather. See `CURRENT_STATUS.md` and
+  `tests/test_sparse_mamba_correctness.py`.
 
 ---
 

@@ -47,6 +47,11 @@ class SeedResult:
     runtime_s: float
     vram_mb: float
     valid: bool = True
+    # Per-sample losses for proper bootstrap (Phase 12 fix)
+    # per_domain_sample_nlls[domain] = [nll_sample_0, nll_sample_1, ...]
+    per_domain_sample_nlls: Optional[Dict[str, List[float]]] = None
+    per_domain_sample_retention: Optional[Dict[str, List[float]]] = None
+    general_sample_nlls: Optional[List[float]] = None  # for base regression bootstrap
 
 
 @dataclass
@@ -99,7 +104,12 @@ def aggregate_seed_results(
     n_bootstrap: int = 10000,
     rng: Optional[np.random.Generator] = None,
 ) -> MethodStatistics:
-    """Aggregate seed results into MethodStatistics with bootstrap CIs."""
+    """Aggregate seed results into MethodStatistics with bootstrap CIs.
+
+    If per-sample data is available (per_domain_sample_retention), bootstraps
+    over individual evaluation samples — the statistically correct approach.
+    Otherwise falls back to seed-level bootstrap (legacy, deprecated).
+    """
     if rng is None:
         rng = np.random.default_rng(42)
 
@@ -119,21 +129,45 @@ def aggregate_seed_results(
     mean_nll: Dict[str, float] = {}
     std_nll: Dict[str, float] = {}
 
+    # Check if we have per-sample data for proper bootstrap
+    has_per_sample = any(
+        r.per_domain_sample_retention is not None
+        for r in valid_results
+    )
+
     for d in domains:
-        ret_vals = [
-            r.per_domain_retention[d] for r in valid_results
-            if r.per_domain_retention.get(d) is not None
-            and np.isfinite(r.per_domain_retention[d])
-        ]
-        if ret_vals:
-            arr = np.array(ret_vals)
-            mean_retention[d] = float(arr.mean())
-            std_retention[d] = float(arr.std())
-            ci_retention[d] = bootstrap_ci(arr, n_bootstrap, rng=rng)
+        if has_per_sample:
+            # Per-sample bootstrap: pool all sample-level retention values
+            # across seeds, then bootstrap over the pooled samples
+            all_sample_ret = []
+            for r in valid_results:
+                if r.per_domain_sample_retention and d in r.per_domain_sample_retention:
+                    all_sample_ret.extend(r.per_domain_sample_retention[d])
+            if all_sample_ret:
+                arr = np.array(all_sample_ret)
+                mean_retention[d] = float(arr.mean())
+                std_retention[d] = float(arr.std())
+                ci_retention[d] = bootstrap_ci(arr, n_bootstrap, rng=rng)
+            else:
+                mean_retention[d] = float("nan")
+                std_retention[d] = float("nan")
+                ci_retention[d] = (float("nan"), float("nan"))
         else:
-            mean_retention[d] = float("nan")
-            std_retention[d] = float("nan")
-            ci_retention[d] = (float("nan"), float("nan"))
+            # Legacy fallback: seed-level bootstrap (deprecated)
+            ret_vals = [
+                r.per_domain_retention[d] for r in valid_results
+                if r.per_domain_retention.get(d) is not None
+                and np.isfinite(r.per_domain_retention[d])
+            ]
+            if ret_vals:
+                arr = np.array(ret_vals)
+                mean_retention[d] = float(arr.mean())
+                std_retention[d] = float(arr.std())
+                ci_retention[d] = bootstrap_ci(arr, n_bootstrap, rng=rng)
+            else:
+                mean_retention[d] = float("nan")
+                std_retention[d] = float("nan")
+                ci_retention[d] = (float("nan"), float("nan"))
 
         nll_vals = [
             r.per_domain_nll.get(d, float("nan")) for r in valid_results

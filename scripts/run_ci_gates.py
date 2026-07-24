@@ -174,19 +174,24 @@ def gate_agx() -> bool:
     code, out = _run([
         sys.executable, "-m", "pytest",
         "tests/test_agx_search_infra.py",
-        "tests/test_agx_operators.py", "-q", "--tb=short",
+        "tests/test_agx_operators.py",
+        "tests/test_experimental_truth.py", "-q", "--tb=short",
     ])
     if code != 0:
         print(f"FAIL: AGX tests\n{out[-2000:]}")
         return False
-    print("PASS: AGX tests (operators, search, Pareto, halving, surrogate, policy)")
+    print("PASS: AGX tests (operators, search, Pareto, halving, surrogate, policy, experimental-truth)")
 
     # Check no stub operators registered
     code, out = _run([
         sys.executable, "-c",
         "from daph_exfusion.geometry.operators import SINGLE_EXPERT_OPS, CROSS_EXPERT_OPS; "
         "all_ops = SINGLE_EXPERT_OPS | CROSS_EXPERT_OPS; "
-        "assert len(all_ops) >= 6; "
+        "assert len(all_ops) >= 7; "
+        "assert 'TIES_MAGNITUDE' in all_ops; "
+        "assert 'TIES_MAJORITY' in all_ops; "
+        "assert 'TIES_FISHER' in all_ops; "
+        "assert 'DARE_TIES_FISHER' in all_ops; "
         "print(f'OK: {len(all_ops)} operators registered: {sorted(all_ops)}')",
     ])
     if code != 0:

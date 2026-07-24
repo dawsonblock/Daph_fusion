@@ -61,23 +61,17 @@ def _transform_delta(
 ) -> Tensor:
     """Applies a SINGLE-EXPERT per-layer operator Op_l to one expert delta.
 
-    For cross-expert operators (TIES, FISHER), use transform_expert_set()
-    via the geometry.operators module instead. This function only handles
-    single-expert operators; TIES/FISHER applied here fall back to RAW
-    because they require cross-expert context that is not available at
-    the single-delta level.
-
-    Phase 11: all operators now have real mathematical contracts.
-    No stubs. See daph_exfusion/geometry/operators.py.
+    For cross-expert operators (TIES, FISHER, TIES_FISHER, etc.), this
+    function raises — they MUST go through the cross-expert path in
+    ``apply_layer_merge_operator`` via ``transform_expert_set``.
     """
     op = config.operator.upper()
     if op in CROSS_EXPERT_OPS:
-        # TIES/FISHER are cross-expert operators. When called on a single
-        # delta, they cannot perform their joint operation and fall back
-        # to RAW (identity). The real cross-expert path uses
-        # transform_expert_set(). This is NOT a stub — it is the
-        # mathematically correct fallback for single-delta context.
-        return delta
+        raise ValueError(
+            f"Operator '{op}' is a cross-expert operator and cannot be applied "
+            f"to a single delta. Use the cross-expert path in "
+            f"apply_layer_merge_operator which calls transform_expert_set()."
+        )
     return transform_single_delta(
         delta,
         op,
@@ -95,9 +89,19 @@ def apply_layer_merge_operator(
     ties_trim: float = 0.2,
     dare_drop: float = 0.0,
     seed: int = 17,
+    fisher_diagonals: Optional[Dict[int, List[Tensor]]] = None,
+    sign_mode: str = "magnitude",
 ) -> None:
     """Merges one layer in place:
-    theta*_l = theta_{0,l} + sum_i lambda_{i,l} * Op_l(Delta_{i,l})."""
+    theta*_l = theta_{0,l} + Op_l({Delta_{i,l}}).
+
+    For single-expert operators (RAW, NORMALIZED, DARE, DELTA_DROPOUT,
+    PROJECT), applies per-delta and sums with lambdas.
+
+    For cross-expert operators (TIES, FISHER, TIES_FISHER, DARE_TIES,
+    DARE_TIES_FISHER), calls transform_expert_set() on the full delta set
+    so that sign election and Fisher weighting actually execute.
+    """
     if len(expert_layers) != len(lambdas):
         raise ValueError(
             f"expert_layers count {len(expert_layers)} != lambdas count {len(lambdas)}"
@@ -109,6 +113,7 @@ def apply_layer_merge_operator(
         ties_trim=ties_trim,
         dare_drop=dare_drop,
     )
+    op = operator.upper()
     generator = torch.Generator().manual_seed(seed)
 
     base_params = dict(base_layer.named_parameters())
@@ -119,13 +124,49 @@ def apply_layer_merge_operator(
             base_param = base_params.get(name)
             if base_param is None:
                 continue
-            merged = base_param.detach().clone().float()
+
+            # Collect deltas for this parameter across all experts
+            deltas = []
             for lam, e_params in zip(config.lambdas, expert_params):
                 expert_param = e_params.get(name)
                 if expert_param is None:
                     continue
-                delta = expert_param.detach().float() - base_param.detach().float()
-                merged += lam * _transform_delta(delta, config, generator)
+                delta = (expert_param.detach().float() - base_param.detach().float()) * lam
+                deltas.append(delta)
+
+            if not deltas:
+                continue
+
+            merged = base_param.detach().clone().float()
+
+            if op in CROSS_EXPERT_OPS:
+                # Cross-expert path: use transform_expert_set
+                fishers = None
+                if op in ("FISHER", "TIES_FISHER", "DARE_TIES_FISHER"):
+                    if fisher_diagonals is None:
+                        raise ValueError(
+                            f"Operator '{op}' requires fisher_diagonals but none were provided."
+                        )
+                    fishers = fisher_diagonals.get(name)
+                    if fishers is None:
+                        # Fallback: uniform Fisher if not in bank
+                        fishers = [torch.ones_like(d) for d in deltas]
+                merged_delta = transform_expert_set(
+                    deltas,
+                    op,
+                    fisher_diagonals=fishers,
+                    trim_fraction=ties_trim,
+                    fisher_gamma=config.fisher_gamma,
+                    generator=generator,
+                    dare_drop=dare_drop,
+                    sign_mode=sign_mode,
+                )
+                merged += merged_delta
+            else:
+                # Single-expert path: apply per-delta and sum
+                for delta in deltas:
+                    merged += _transform_delta(delta, config, generator)
+
             target_param.copy_(merged.to(target_param.dtype))
 
 
@@ -211,6 +252,7 @@ class LayerwiseGeometrySearchEngine:
         hidden_state_fn: Callable[
             [nn.Module, Dict[str, Tensor]], Sequence[Tensor]
         ] = _default_hidden_states,
+        curvature_bank: Optional[Dict[str, Dict[str, Tensor]]] = None,
     ) -> None:
         self.base_model = base_model
         self.experts = list(experts)
@@ -218,6 +260,7 @@ class LayerwiseGeometrySearchEngine:
         self.max_cka_drift = max_cka_drift
         self._layer_module_fn = layer_module_fn
         self._hidden_state_fn = hidden_state_fn
+        self.curvature_bank = curvature_bank
 
     @property
     def num_layers(self) -> int:
@@ -241,6 +284,8 @@ class LayerwiseGeometrySearchEngine:
                 lambdas=config.lambdas,
                 ties_trim=config.ties_trim,
                 dare_drop=config.dare_drop,
+                fisher_diagonals=getattr(self, 'curvature_bank', None),
+                sign_mode=getattr(config, 'sign_mode', 'magnitude'),
             )
         return merged_model
 
@@ -254,8 +299,8 @@ class LayerwiseGeometrySearchEngine:
         with torch.no_grad():
             h_base = self._hidden_state_fn(self.base_model, self.val_batch)
             h_merged = self._hidden_state_fn(merged_model, self.val_batch)
-        # Extract attention mask from val_batch if present (StructuredBatch)
-        mask = getattr(self.val_batch, "attention_mask", None)
+        # Extract attention mask from val_batch (it's a dict, not an object)
+        mask = self.val_batch.get("attention_mask") if isinstance(self.val_batch, dict) else getattr(self.val_batch, "attention_mask", None)
         drifts: List[float] = []
         for hb, hm in zip(h_base, h_merged):
             cka_result: MetricResult = compute_linear_cka(hb, hm, attention_mask=mask)

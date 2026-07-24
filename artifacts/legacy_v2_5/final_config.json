@@ -1,0 +1,34 @@
+{
+  "release": "v2.4.0-correctness",
+  "config_hash": "1f271939b73ca3fe1f289ff753981ce82a1495f14c445ffefe5e83346a43a207",
+  "frozen_at": "2026-07-24T05:42:57.974794+00:00",
+  "config": {
+    "base_model": "distilgpt2",
+    "best_method": "TIES",
+    "seeds": [
+      11,
+      23,
+      37,
+      51,
+      73
+    ],
+    "domains": [
+      "math",
+      "planning",
+      "coding"
+    ],
+    "merge_scale": 1.0,
+    "merge_hyperparameters": {
+      "dare_p": 0.1,
+      "ties_trim": 0.5,
+      "fisher_gamma": 0.5
+    },
+    "optimal_lambdas": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "n_samples_validation": 50
+  },
+  "test_split_used_during_search": false
+}

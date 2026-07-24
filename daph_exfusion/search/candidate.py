@@ -17,6 +17,7 @@ class LayerMergeConfig:
     ties_trim: float = 0.2
     dare_drop: float = 0.0
     fisher_gamma: float = 0.5
+    sign_mode: str = "magnitude"  # "magnitude" or "majority"
 
 
 @dataclass(frozen=True)
