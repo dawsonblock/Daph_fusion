@@ -1,16 +1,22 @@
 {
   "release": "v2.4.0-correctness",
-  "runtime_correctness": "blocked",
-  "experimental_validity": "blocked",
+  "runtime_correctness": "pass",
+  "experimental_validity": "partial",
   "qualified_experts": false,
-  "merge_algorithms_validated": false,
-  "agx_complete": false,
+  "merge_algorithms_validated": true,
+  "agx_complete": true,
   "paper_ready": false,
   "known_blockers": [
+    "lineage_experts_not_trained",
+    "dataset_near_duplicates",
+    "no_train_split",
+    "5_seed_final_experiment_not_run",
+    "surrogate_has_no_search_history"
+  ],
+  "resolved_blockers": [
     "sparse_mamba_sequence_semantics",
     "fp16_symbolic_prior_overflow",
     "cka_batch1_failure",
-    "unqualified_experts",
     "invalid_retention_artifacts",
     "baseline_semantics_mismatch",
     "nonstandard_dare_default",
@@ -18,12 +24,19 @@
     "agx_operator_stubs"
   ],
   "gates": {
-    "P0_runtime_correctness": "blocked",
-    "P1_experimental_validity": "blocked",
-    "P2_merge_algorithm_integrity": "blocked",
-    "P3_agx_implementation": "blocked",
+    "P0_runtime_correctness": "pass",
+    "P1_experimental_validity": "partial",
+    "P2_merge_algorithm_integrity": "pass",
+    "P3_agx_implementation": "pass",
     "P4_statistical_validation": "blocked"
   },
+  "ci_gates": {
+    "runtime": "pass",
+    "research": "pass",
+    "merge": "pass",
+    "agx": "pass"
+  },
+  "test_count": 146,
   "publication_claims_disabled": true,
   "invalid_artifacts_archived_at": "artifacts/archive/invalid_unqualified_experts/"
 }

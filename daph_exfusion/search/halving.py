@@ -24,7 +24,7 @@ from daph_exfusion.search.pareto import (
 
 
 @dataclass
-class HalvingStage:
+class HalvingStages:
     """Configuration for successive halving stages."""
     # Stage A: quick screen
     stage_a_subset_fraction: float = 0.1

@@ -351,7 +351,26 @@ class TokenizerBoundRulesEngine:
 
 
 class SubwordSequenceBridge:
-    """Parallel Thread-Pooled Bridge for Multi-Token Subword Sequences."""
+    """Parallel Thread-Pooled Bridge for Multi-Token Subword Sequences.
+
+    Production classification (Phase 18):
+      backend = "cpu_compatibility"
+      compile_safe = false
+      cuda_graph_safe = false
+      production_default = false
+
+    This bridge uses Python ThreadPoolExecutor + tokenizer.decode/encode
+    round-trips, which are CPU-bound, non-compilable, and incompatible
+    with CUDA graphs. It is kept as a compatibility fallback for
+    environments without a vectorized symbolic solver. Do NOT treat it
+    as the fast path; prefer candidate-vocabulary routing for production.
+    """
+
+    # Classification metadata (Phase 18)
+    backend = "cpu_compatibility"
+    compile_safe = False
+    cuda_graph_safe = False
+    production_default = False
 
     def __init__(
         self,

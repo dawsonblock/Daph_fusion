@@ -137,3 +137,49 @@ def rank_candidates(
         reverse=True,
     )
     return pareto_sorted + non_pareto_sorted
+
+
+class ParetoFrontier:
+    """Backward-compatible Pareto frontier class (MAXIMIZATION semantics).
+
+    Maintains a list of non-dominated candidates. When a new candidate
+    is added, it removes any existing entries it dominates and is itself
+    removed if any existing entry dominates it.
+
+    NOTE: This class uses MAXIMIZATION semantics (higher objectives are
+    better), matching the old test_roadmap_validity.py expectations.
+    The new function-based API (compute_pareto_front) uses minimization
+    semantics internally; this class negates objectives before comparing.
+    """
+
+    def __init__(self) -> None:
+        self.entries: List[dict] = []
+
+    def add_candidate(
+        self,
+        candidate_hash: str,
+        config: dict,
+        objectives: List[float],
+    ) -> None:
+        """Add a candidate to the frontier (maximization: higher is better)."""
+        # Negate for minimization comparison
+        new_vec = -np.array(objectives, dtype=float)
+
+        # Remove entries dominated by the new candidate
+        self.entries = [
+            e for e in self.entries
+            if not pareto_dominates(new_vec, -np.array(e["objectives"], dtype=float))
+        ]
+
+        # Check if any existing entry dominates the new candidate
+        dominated = any(
+            pareto_dominates(-np.array(e["objectives"], dtype=float), new_vec)
+            for e in self.entries
+        )
+
+        if not dominated:
+            self.entries.append({
+                "candidate_hash": candidate_hash,
+                "config": config,
+                "objectives": list(objectives),
+            })

@@ -104,7 +104,7 @@ def classify_layer_group(
 ) -> str:
     """Classify a parameter into a layer group based on its name and index."""
     name_lower = param_name.lower()
-    if "embed" in name_lower and "position" not in name_lower:
+    if ("embed" in name_lower and "position" not in name_lower) or "wte" in name_lower:
         return "token_embeddings"
     if "position" in name_lower or "pos_embed" in name_lower:
         return "positional_embeddings"
