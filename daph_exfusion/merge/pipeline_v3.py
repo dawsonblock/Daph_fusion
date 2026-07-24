@@ -1,23 +1,17 @@
-"""Canonical merge pipeline v3 — single entry point for all dense merge methods.
+"""Canonical merge pipeline v3 — production dispatcher.
 
-Every merge — CLI, tests, AGX, experiments, notebooks — goes through
-``merge_experts``. This guarantees that the algorithm name in the config
-matches the mathematical operations actually performed, and produces a
-``MergeResult`` with an ``OperatorTrace`` for provenance.
+Production merge modes (TA-0 through TA-3):
+    TA-0 (uniform)         — θ* = θ₀ + α (1/N) Σᵢ Δᵢ
+    TA-1 (weighted)        — θ* = θ₀ + α Σᵢ λᵢ Δᵢ
+    TA-2 (Fisher-weighted) — θ*_k = θ₀ + α Σᵢ wᵢ F_{i,k}^γ Δ_{i,k} / (Σᵢ wᵢ F_{i,k}^γ + ε)
+    TA-3 (family-weighted) — θ*_{f,k} = θ₀ + α_f Σᵢ w_{i,f} Δ_{i,k}
 
-Supported canonical dense methods (mainline):
-    task_arithmetic         — θ* = θ₀ + α Σᵢ λᵢ Δᵢ
-    fisher_dense            — θ*_k = Σᵢ λᵢ F_{i,k}^γ θ_{i,k} / (Σᵢ λᵢ F_{i,k}^γ + ε)
-    fisher_base_anchored    — includes base Fisher F₀ with weight λ₀
-    regmean                 — W* = (Σᵢ WᵢCᵢ)(ΣᵢCᵢ + ρI)⁻¹
-    regmean_pp              — RegMean with propagation-aware recalibration
-    coefficient_opt         — θ(λ) = θ₀ + Σᵢ λᵢ Δᵢ, optimize λ on real forward
-    trust_region            — coefficient_opt with ½ Δᵀ F₀ Δ ≤ ε constraint
-    kfac_barycenter         — K-FAC structured merge (G⊗A weighted)
-    agx                     — architecture-aware selection of dense merge geometry
+Legacy baselines (controlled comparisons):
+    dare, ties_magnitude, ties_majority, dare_ties
 
-Legacy benchmark methods (controlled baselines):
-    dare, ties_magnitude, ties_majority, dare_ties, emr, model_stock, slerp
+Experimental methods (frozen, not in production path):
+    regmean, regmean_pp, kfac, surgery, subspace, trust_region,
+    coefficient_opt, agx — see daph_exfusion/experimental/
 """
 from __future__ import annotations
 
@@ -38,6 +32,10 @@ from daph_exfusion.merge.types import (
     validate_parameter_names,
 )
 from daph_exfusion.merge.task_arithmetic import merge_task_arithmetic, merge_frozen
+from daph_exfusion.merge.fisher_dense import (
+    merge_fisher_dense,
+    merge_fisher_base_anchored,
+)
 
 
 def merge_experts(
@@ -56,23 +54,32 @@ def merge_experts(
     """Merge experts into a single model using the canonical v3 pipeline.
 
     This is the single entry point for all merging. The method is selected
-    by config.method, and the appropriate dense merge algorithm is dispatched.
+    by config.method, and the appropriate merge algorithm is dispatched.
+
+    Production methods:
+        task_arithmetic         — TA-0/TA-1 (uniform or weighted)
+        fisher_dense            — TA-2 (Fisher-weighted)
+        fisher_base_anchored    — TA-2 with base anchor
+        frozen                  — no change (control)
+
+    Legacy baselines:
+        dare, ties_magnitude, ties_majority, dare_ties
+
+    Experimental methods (imported lazily, see daph_exfusion/experimental/):
+        regmean, regmean_pp, coefficient_opt, trust_region,
+        kfac_barycenter, agx
 
     Args:
         base_model: The base model (θ₀).
         experts: List of specialist models.
         config: Merge configuration (method, hyperparameters).
         curvature_bank: Dict mapping expert_name → {param_name: Fisher diagonal}.
-                        Required for fisher_dense, fisher_base_anchored.
         base_fisher: Dict mapping param_name → base model Fisher diagonal.
-                     Required for fisher_base_anchored, trust_region.
         activation_bank: Dict mapping expert_name → {param_name: covariance}.
-                         Required for regmean, regmean_pp.
         kfac_bank: Dict mapping expert_name → {param_name → (A_factor, G_factor)}.
-                   Required for kfac_barycenter.
-        calibration_data: Calibration data for coefficient_opt, trust_region, regmean_pp.
-        evaluator: Callable(merged_model) → float for coefficient_opt, trust_region.
-        forward_fn: Custom forward function for regmean_pp.
+        calibration_data: Calibration data for optimization-based methods.
+        evaluator: Callable(merged_model) → float or dict.
+        forward_fn: Custom forward function.
         device: Device for computation.
 
     Returns:
@@ -80,7 +87,10 @@ def merge_experts(
     """
     method = config.method
 
-    # Dense mainline methods
+    # =========================================================================
+    # Production methods
+    # =========================================================================
+
     if method == MergeMethod.TASK_ARITHMETIC:
         return merge_task_arithmetic(base_model, experts, config, device=device)
 
@@ -93,73 +103,78 @@ def merge_experts(
                 "fisher_dense requires curvature_bank "
                 "(empirical Fisher diagonals)."
             )
-        from daph_exfusion.merge.fisher_dense import merge_fisher_dense
         return merge_fisher_dense(base_model, experts, config, curvature_bank, device=device)
 
     elif method == MergeMethod.FISHER_BASE_ANCHORED:
         if curvature_bank is None:
-            raise ValueError(
-                "fisher_base_anchored requires curvature_bank."
-            )
+            raise ValueError("fisher_base_anchored requires curvature_bank.")
         if base_fisher is None:
-            raise ValueError(
-                "fisher_base_anchored requires base_fisher."
-            )
-        from daph_exfusion.merge.fisher_dense import merge_fisher_base_anchored
+            raise ValueError("fisher_base_anchored requires base_fisher.")
         return merge_fisher_base_anchored(
             base_model, experts, config, curvature_bank, base_fisher, device=device
         )
 
+    # =========================================================================
+    # Legacy baselines
+    # =========================================================================
+
+    elif method in (MergeMethod.DARE, MergeMethod.TIES_MAGNITUDE,
+                    MergeMethod.TIES_MAJORITY, MergeMethod.DARE_TIES):
+        return _merge_legacy_baseline(base_model, experts, config, device)
+
+    # =========================================================================
+    # Experimental methods (lazy import from experimental/)
+    # =========================================================================
+
     elif method == MergeMethod.REGMEAN:
+        from daph_exfusion.experimental.regmean.regmean import merge_regmean
         if activation_bank is None:
-            raise ValueError(
-                "regmean requires activation_bank (activation covariance)."
-            )
-        from daph_exfusion.merge.regmean import merge_regmean
+            raise ValueError("regmean requires activation_bank.")
         return merge_regmean(base_model, experts, config, activation_bank, device=device)
 
     elif method == MergeMethod.REGMEAN_PP:
+        from daph_exfusion.experimental.regmean.regmean_pp import merge_regmean_pp
         if activation_bank is None:
             raise ValueError("regmean_pp requires activation_bank.")
         if calibration_data is None:
             raise ValueError("regmean_pp requires calibration_data.")
-        from daph_exfusion.merge.regmean_pp import merge_regmean_pp
         return merge_regmean_pp(
             base_model, experts, config, activation_bank,
             calibration_data, forward_fn=forward_fn, device=device,
         )
 
     elif method == MergeMethod.COEFFICIENT_OPT:
+        from daph_exfusion.experimental.coefficient_opt.coefficient_opt import (
+            merge_coefficient_opt,
+        )
         if calibration_data is None:
             raise ValueError("coefficient_opt requires calibration_data.")
-        if evaluator is None:
-            raise ValueError("coefficient_opt requires evaluator.")
-        from daph_exfusion.merge.coefficient_opt import merge_coefficient_opt
+        # evaluator is optional — merge_coefficient_opt falls back to causal LM loss
         return merge_coefficient_opt(
             base_model, experts, config, calibration_data, evaluator, device=device,
         )
 
     elif method == MergeMethod.TRUST_REGION:
+        from daph_exfusion.experimental.trust_region.trust_region import merge_trust_region
         if base_fisher is None:
             raise ValueError("trust_region requires base_fisher.")
         if calibration_data is None:
             raise ValueError("trust_region requires calibration_data.")
         if evaluator is None:
             raise ValueError("trust_region requires evaluator.")
-        from daph_exfusion.merge.trust_region import merge_trust_region
         return merge_trust_region(
             base_model, experts, config, base_fisher,
             calibration_data, evaluator, device=device,
         )
 
     elif method == MergeMethod.KFAC_BARYCENTER:
+        from daph_exfusion.experimental.kfac.kfac_merge import merge_kfac
         if kfac_bank is None:
             raise ValueError("kfac_barycenter requires kfac_bank.")
-        from daph_exfusion.merge.kfac_merge import merge_kfac
         return merge_kfac(base_model, experts, config, kfac_bank, device=device)
 
     elif method == MergeMethod.AGX:
-        from daph_exfusion.search.agx import merge_agx
+        from daph_exfusion.experimental.agx.agx import merge_agx
         return merge_agx(
             base_model, experts, config,
             curvature_bank=curvature_bank,
@@ -170,10 +185,9 @@ def merge_experts(
             device=device,
         )
 
-    # Legacy benchmark methods
-    elif method in (MergeMethod.DARE, MergeMethod.TIES_MAGNITUDE,
-                    MergeMethod.TIES_MAJORITY, MergeMethod.DARE_TIES):
-        return _merge_legacy_sparse(base_model, experts, config, curvature_bank, device)
+    # =========================================================================
+    # Not yet implemented
+    # =========================================================================
 
     elif method == MergeMethod.EMR:
         raise NotImplementedError("EMR not yet implemented in v3 pipeline")
@@ -188,19 +202,17 @@ def merge_experts(
         raise ValueError(f"Unknown merge method: '{method}'")
 
 
-def _merge_legacy_sparse(
+def _merge_legacy_baseline(
     base_model: nn.Module,
     experts: Sequence[nn.Module],
     config: MergeConfig,
-    curvature_bank: Optional[Dict[str, Dict[str, Tensor]]],
     device: str,
 ) -> MergeResult:
-    """Dispatch to legacy sparse merge methods (DARE, TIES, DARE-TIES).
+    """Dispatch to legacy baseline methods (DARE, TIES, DARE-TIES).
 
-    These are controlled baselines, not mainline. They use the legacy
-    operators from daph_exfusion.merge.legacy.
+    These are controlled baselines from daph_exfusion/baselines/.
     """
-    from daph_exfusion.merge.legacy import op_dare, op_ties, op_dare_ties
+    from daph_exfusion.baselines import op_dare, op_ties, op_dare_ties
 
     n_experts = len(experts)
     validate_parameter_names(experts, base_model)

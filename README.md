@@ -1,488 +1,268 @@
-# DAPH NeSy-MoE v1.1 Extended
+# DAPH ExFusion v3 — Dense Model Merging
 
-> **Differentiable Adaptive Predictive Hybrid Neurosymbolic Mixture-of-Experts**
-> _Unifying System 1 Neural Intuition with System 2 Symbolic Reasoning inside PyTorch Transformer & State-Space Architectures._
+> **Production Task Arithmetic merge pipeline with architecture-aware optimization.**
+> _Optimized weighted task vectors with constrained general-capability preservation._
 
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![PyTorch Version](https://img.shields.io/badge/pytorch-2.1%2B-ee4c2c.svg)](https://pytorch.org/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/tests-14%2F14%20passing-brightgreen.svg)](<>)
-[![Architecture](https://img.shields.io/badge/architecture-5--Path%20NeSy--MoE-purple.svg)](daph_nesy_v1_0.py)
-
----
-
-## 📌 Table of Contents
-
-- [Executive Overview](#-executive-overview)
-- [Key Architectural Highlights](#-key-architectural-highlights)
-- [System Architecture & Routing Flow](#-system-architecture--routing-flow)
-- [Core Components Deep-Dive](#-core-components-deep-dive)
-  - [1. NeSyMacroRouter](#1-nesymacrorouter)
-  - [2. TokenizerBoundRulesEngine](#2-tokenizerboundrulesengine)
-  - [3. VectorizedSymbolicExpert \& Domain Solvers](#3-vectorizedsymbolicexpert--domain-solvers)
-  - [4. NeSyOutputVerifier](#4-nesyoutputverifier)
-  - [5. NeSyDecoderLayer](#5-nesydecoderlayer)
-  - [6. ExFusion Model Merging (DARE → TIES → Fisher)](#6-exfusion-model-merging-dare--ties--fisher)
-- [Installation \& Prerequisites](#-installation--prerequisites)
-- [Quick Start \& Code Examples](#-quick-start--code-examples)
-  - [Basic Setup](#basic-setup)
-  - [Registering Custom Solvers](#registering-custom-solvers)
-  - [Grammar Logit Masking](#grammar-logit-masking)
-- [Pretrained Model Runner (`run_model.py`)](#-pretrained-model-runner-run_modelpy)
-- [Verification \& Test Suite](#-verification--testing)
-- [Repository File Structure](#-repository-directory-structure)
-- [Mathematical Foundations](#-mathematical-foundations)
-- [License \& Citation](#-license--citation)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/pytorch-2.1%2B-ee4c2c.svg)](https://pytorch.org/)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](#testing)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 ---
 
-## 🧠 Executive Overview
+## Overview
 
-Standard Deep Learning models excel at **System 1 tasks** (pattern recognition, fluent language generation, associative recall) but frequently fail or hallucinate during **System 2 tasks** (exact arithmetic, formal logic, Boolean satisfiability, strict syntax generation). Post-hoc decoding filters or external API tools often break end-to-end backpropagation and increase latency.
+ExFusion v3 merges multiple fine-tuned specialist models into a single model
+that retains specialist capabilities while preserving general language ability.
 
-**DAPH NeSy-MoE v1.1 Extended** solves this by injecting symbolic logic directly **into the routing mathematics before softmax** and bridging non-differentiable solver execution back into continuous representations via a **Straight-Through Estimator (STE)** gradient bypass.
+The production path is **optimized Task Arithmetic**:
 
 ```
-                    ┌──────────────────────────────────────────────┐
-                    │            Input Sequence / Tokens           │
-                    └──────────────────────┬───────────────────────┘
-                                           │
-                        ┌──────────────────┴──────────────────┐
-                        │    Predictive Difficulty Scoring    │
-                        │        𝓓(x) ∈ [0.0, 1.0]           │
-                        └──────────────────┬──────────────────┘
-                                           │
-               ┌───────────────────────────┼───────────────────────────┐
-               ▼                           ▼                           ▼
-      ┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
-      │  Path 0: SSM    │         │ Path 1: Attention│        │ Path 2: Hybrid  │
-      │  (Mamba-2 O(N)) │         │ (Causal Multi-H)│        │ (SSM + Attn)    │
-      └────────┬────────┘         └────────┬────────┘         └────────┬────────┘
-               │                           │                           │
-               └───────────────────────────┼───────────────────────────┘
-                                           │
-                   ┌───────────────────────┴───────────────────────┐
-                   ▼                                               ▼
-      ┌─────────────────────────┐                     ┌─────────────────────────┐
-      │  Path 3: Dynamic Depth  │                     │  Path 4: Symbolic Expert│
-      │  (Recurrent / Cheap)    │                     │  (Exact Tensor Solvers) │
-      └────────────┬────────────┘                     └────────────┬────────────┘
-                   │                                               │
-                   └───────────────────────┬───────────────────────┘
-                                           ▼
-                    ┌──────────────────────────────────────────────┐
-                    │     Fused Output Representation & Meta       │
-                    └──────────────────────────────────────────────┘
+θ* = θ₀ + α Σᵢ λᵢ Δᵢ
 ```
 
----
+where:
+- `θ₀` is the base model
+- `Δᵢ = θᵢ - θ₀` are task vectors
+- `λᵢ` are expert coefficients (optimized)
+- `α` is the global scale (optimized)
 
-## ⚡ Key Architectural Highlights
+The search optimizes `(λ₁, ..., λ_N, α)` on a simplex grid with a constrained
+objective:
 
-- **5-Path Adaptive Macro-Routing**: Dynamically dispatches tokens/batches across **Mamba-2 SSM** (`0`), **Causal Attention** (`1`), **Full Hybrid** (`2`), **Recurrent Depth** (`3`), and **Vectorized Symbolic Expert** (`4`).
-- **Additive Symbolic Logit Priors**: Modifies router logits _before_ softmax ($z_{\text{eff}} = z_{\text{neural}} + b_{\text{symbolic}}$) with hard mandates ($+10^5$), hard forbids ($-10^5$), or soft domain biases.
-- **Straight-Through Estimator (STE) Gradient Bridge**: Discretizes neural hidden states to token IDs, executes parallel domain solvers, and re-embeds the discrete solution while preserving smooth gradient backpropagation through probabilities:
-  $$\text{STE} = (\mathbf{1}_{\text{solved}} - \mathbf{p}).\text{detach}() + \mathbf{p}$$
-- **Tokenizer-Bound Structural Rules**: Vectorized rule engine mapping math, logic, padding, JSON, SQL, and symbolic trigger tokens across arbitrary tokenizers (`HuggingFace`, `tiktoken`, explicit ID maps).
-- **Extensible Domain Solvers**: Out-of-the-box support for exact integer arithmetic, Boolean SAT solving, AST bracket canonicalization, digit squaring, and custom user-defined solvers registered at runtime.
-- **Inference-Time Grammar Guardrails**: `NeSyOutputVerifier` enforces balanced brackets and structural constraints via dynamic logit masking during autoregressive decoding.
-- **DARE → TIES → Fisher Model Merging**: Merges task-specific experts into base checkpoints with density pruning, sign-consensus voting, and empirical Fisher information diagonal weighting (`daph_hybrid_exfusion_v2_3.py`).
-
----
-
-## 📐 System Architecture & Routing Flow
-
-```mermaid
-graph TD
-    A[Input Hidden States X & Token IDs] --> B[TokenizerBoundRulesEngine]
-    A --> C[PredictiveDifficultyMacroRouter]
-
-    B -->|Logit Priors b_symbolic| D[NeSyMacroRouter]
-    C -->|Neural Logits z_neural| D
-
-    D -->|z_eff = z_neural + b_symbolic| E[Softmax / Top-P Path Selection]
-
-    E -->|Path 0| F[Mamba-2 State Space Model]
-    E -->|Path 1| G[Causal Self-Attention]
-    E -->|Path 2| H[Hybrid SSM + Attention]
-    E -->|Path 3| I[Recurrent Cheap Path]
-    E -->|Path 4| J[Vectorized Symbolic Expert]
-
-    J --> J1[De-Embed Logits]
-    J1 --> J2[Argmax Discrete Tokens]
-    J2 --> J3[Tensor Domain Solver: Math/SAT/AST]
-    J3 --> J4[STE Re-Embedding Bridge]
-    J4 --> J5[Context Preservation Gate α]
-
-    F --> K[Path Weighted Fusion]
-    G --> K
-    H --> K
-    I --> K
-    J5 --> K
-
-    K --> L[Output Layer Representation]
+```
+max  R_mean(λ, α)
+s.t. R_min(λ, α) ≥ τ       (minimum specialist retention)
+     G_regression(λ, α) ≤ δ  (maximum general regression)
 ```
 
+Defaults: `τ = 0.70`, `δ = 0.25`.
+
 ---
 
-## 🧩 Core Components Deep-Dive
+## Production Merge Modes
 
-### 1. `NeSyMacroRouter`
+| Mode | Formula | Search Space | When to Use |
+|------|---------|-------------|-------------|
+| **TA-0** | `θ* = θ₀ + α/N Σᵢ Δᵢ` | `α` only | Uniform baseline |
+| **TA-1** | `θ* = θ₀ + α Σᵢ λᵢ Δᵢ` | `(λ₁,...,λ_N, α)` | **Default** — weighted TA |
+| **TA-2** | `θ*_k = θ₀ + α Σᵢ wᵢ F_{i,k}^γ Δ_{i,k} / Z` | `(w₁,...,w_N, α, γ)` | When TA-1 is exhausted |
+| **TA-3** | `θ*_{f,k} = θ₀ + α_f Σᵢ w_{i,f} Δ_{i,k}` | Per-family `(w, α)` | Architecture-aware refinement |
 
-Extends `PredictiveDifficultyMacroRouter` by introducing an additive symbolic prior channel:
+### Search Space Size
+
+For 3 experts at resolution 0.1:
+- Simplex grid: 66 λ-combinations
+- × 5 α values = **330 configurations**
+- Trivial at DistilGPT2 scale
+
+Refinement at 0.025 resolution around the best candidate is automatic.
+
+---
+
+## Quick Start
 
 ```python
-z_effective = z_neural + b_symbolic
-```
-
-- **Mandate Path**: $+10^5$ (Forces selection regardless of neural confidence).
-- **Forbid Path**: $-10^5$ (Blocks path entirely).
-- **Neutral**: $0.0$ (Lets predictive difficulty and neural logits govern).
-
-### 2. `TokenizerBoundRulesEngine`
-
-Maps discrete token IDs to macro-routing priors. It auto-resolves character strings against tokenizer vocabularies so rules persist across tokenizer swaps.
-
-- **Math Operators** (`+`, `-`, `*`, `/`, `%`, `=`): Routes to high-precision Attention/Symbolic path.
-- **Control/Padding Tokens** (`[PAD]`, `<s>`, `</s>`): Forces fast Cheap path.
-- **Logical Symbols** (`&`, `|`, `^`, `~`): Applies soft bias to Mamba-2 SSM.
-- **JSON & SQL Tokens** (`{`, `}`, `SELECT`, `FROM`): Soft bias to Transformer Attention.
-- **Symbolic Trigger Tokens** (`eval`, `exec`, `solve`, `sat`, `ast`): Mandates Symbolic Expert (`SYMBOLIC_PATH = 4`).
-
-### 3. `VectorizedSymbolicExpert` & Domain Solvers
-
-Executes exact GPU-vectorized logic over tensor batches:
-
-- **`digit_squaring`**: Vectorized mod-10 digit squaring over ASCII tokens.
-- **`arithmetic` / `arithmetic_eval`**: Evaluates `+`, `-`, `*` over digit tokens based on preceding operators.
-- **`sat` / `sat_boolean`**: Flips Boolean bit tokens (`'0'` $\leftrightarrow$ `'1'`) under `NOT` (`~`, `!`) operations.
-- **`ast` / `ast_transformer`**: Canonicalizes mismatched closing delimiters (`]`, `}`) following `(`.
-- **`SubwordSequenceBridge`**: Handles multi-token subword tokenizers (BPE, SentencePiece) by decoding to text, executing string-level solvers, and re-encoding back to aligned token tensors.
-- **`build_subword_vocab_map(tokenizer)`**: Precomputes a GPU-native lookup table (`vocab_map`) mapping subword vocabulary token IDs to solver target IDs in $O(1)$ time.
-- **`register_solver(name, fn)`**: Allows registering custom PyTorch tensor routines dynamically.
-
-### 4. `NeSyOutputVerifier` & Structured Grammar Guardrails
-
-Post-hoc decoding guardrails that analyze generation state and modify next-token logits:
-
-```python
-logits = verifier.verify_and_correct_logits(generated_ids, next_token_logits)
-```
-
-- **`NeSyOutputVerifier`**: Enforces open/close bracket counts across batch sequences in parallel.
-- **`JSONOutputVerifier`**: Enforces `{}` brace and `[]` bracket balance while forbidding premature `EOS` tokens when structures remain open.
-- **`SQLOutputVerifier`**: Enforces SQL clause sequence (`SELECT` $\rightarrow$ `FROM`) and semicolon termination.
-- **`FSMGrammarVerifier`**: Evaluates active state transitions over Finite State Machine lookup tables and masks disallowed next-tokens.
-
-### 5. `NeSyDecoderLayer`
-
-Integrates System 1 hybrid processing with System 2 symbolic routing seamlessly without altering the core DAPH execution signature. Supports layer-selective topology (`layer_idx`, `active_symbolic_layers`) and cached symbolic output reuse (`_get_cached_symbolic_out`):
-
-```python
-output, meta = nesy_layer(
-    hidden_states,
-    token_ids=input_ids,
-    symbolic_priors=priors  # Optional override
-)
-```
-
-### 6. `NeSyModel` Multi-Layer Container
-
-Full multi-layer stack container managing N `NeSyDecoderLayer` instances. Handles unified state management (`mamba_state`, `attn_state`, `attn_padding_state`) and cache propagation across layers during autoregressive generation:
-
-```python
-model = NeSyModel(config, num_layers=6, tokenizer=my_tokenizer, symbolic_expert=expert)
-output, past_layer_states = model(hidden_states, token_ids=input_ids, use_cache=True)
-```
-
-### 7. ExFusion Model Merging (`DARE → TIES → Fisher`)
-
-Located in [daph_hybrid_exfusion_v2_3.py](daph_hybrid_exfusion_v2_3.py):
-
-1. **DARE Preprocessing**: Randomly drops task vector parameters at rate $p$ and scales remaining weights by $1/(1-p)$.
-2. **TIES Trimming & Sign Election**: Trims bottom $k\%$ parameters by magnitude, calculates pure sign-majority consensus voting across experts, and filters conflicting signs.
-3. **Fisher Information Diagonal Weighting**: Scales expert contributions by parameter-level empirical Fisher information.
-
----
-
-## 📦 Installation & Prerequisites
-
-### Prerequisites
-
-- Python 3.10+
-- PyTorch 2.1+ (2.8+ recommended)
-- `transformers` (for pretrained tokenizer/model integration)
-
-### Setup
-
-Clone the repository and install required dependencies:
-
-```bash
-git clone https://github.com/dawsonblock/Daph_fusion.git
-cd Daph_fusion
-pip install torch transformers
-```
-
----
-
-## 🚀 Quick Start & Code Examples
-
-### Basic Setup
-
-```python
-import torch
-from daph_hybrid_exfusion_v2_3 import DAPHConfig
-from daph_nesy_v1_0 import (
-    NeSyDecoderLayer,
-    TokenizerBoundRulesEngine,
-    VectorizedSymbolicExpert,
+from daph_exfusion.merge import (
+    MergeConfig, MergeMethod, merge_experts_v3,
+    search_task_arithmetic,
 )
 
-# 1. Initialize 5-path configuration
-config = DAPHConfig(
-    hidden_size=768,
-    num_attention_heads=12,
-    num_paths=5,  # 0: Mamba, 1: Attn, 2: Hybrid, 3: Cheap, 4: Symbolic
-    routing_granularity="token",
+# Simple merge (TA-0)
+config = MergeConfig(
+    method=MergeMethod.TASK_ARITHMETIC,
+    task_scale=0.5,
+)
+result = merge_experts_v3(base_model, experts, config)
+
+# Optimized merge (TA-1) — grid search over (λ, α)
+def evaluator(merged_model):
+    # Compute domain retention and general regression
+    return {
+        "mean_retention": 0.85,
+        "min_retention": 0.78,
+        "general_regression": 0.15,
+        "per_domain_retention": {"math": 0.88, "planning": 0.82, "coding": 0.85},
+    }
+
+search_result = search_task_arithmetic(
+    base_model, experts, evaluator,
+    mode="TA-1",
+    resolution=0.1,
+    tau=0.70,   # min specialist retention
+    delta=0.25, # max general regression
 )
 
-# 2. Setup Rules Engine & Symbolic Expert
-vocab_size = 32000
-lm_head_weight = torch.randn(vocab_size, config.hidden_size)
-
-rules_engine = TokenizerBoundRulesEngine(num_paths=5)
-expert = VectorizedSymbolicExpert(
-    hidden_size=config.hidden_size,
-    vocab_size=vocab_size,
-    lm_head_weight=lm_head_weight,
-    domain="arithmetic_eval",
-)
-
-# 3. Instantiate NeSy Decoder Layer
-layer = NeSyDecoderLayer(
-    config=config,
-    rules_engine=rules_engine,
-    symbolic_expert=expert,
-)
-
-# 4. Forward Pass
-batch_size, seq_len = 2, 16
-hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
-input_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
-
-output, meta = layer(hidden_states, token_ids=input_ids)
-print("Layer Output Shape:", output.shape)
-print("Router Selected Paths Shape:", meta["selected_paths"].shape)
+print(f"Best: λ={search_result.best.lambdas}, α={search_result.best.scale}")
+print(f"Mean retention: {search_result.best.mean_retention:.4f}")
 ```
 
 ---
 
-### Registering Custom Solvers
+## Architecture
 
+```
+daph_exfusion/
+    merge/
+        types.py              — Canonical types (MergeConfig, MergeResult, OperatorTrace)
+        task_arithmetic.py    — TA merge operator + scale search
+        task_search.py        — Simplex grid search (TA-0 through TA-3)
+        fisher_dense.py       — Exact empirical Fisher + dense Fisher merge (TA-2)
+        pipeline_v3.py        — Single dispatch entry point
+        pipeline.py           — v2.5 backward-compatible API
+    geometry/
+        spectral.py           — SVD diagnostics, spectral gate
+        interactions.py       — Fisher interaction matrix, curvature cosine
+        activations.py        — Activation covariance bank
+        profiler.py           — Geometry profiler (per-group diagnostics)
+        representations.py    — CKA, KL, MSE, correlation analysis
+    curvature/
+        bank.py               — CurvatureBank with provenance snapshots
+    validation/
+        holdout.py            — Train/validation/test split integrity
+        provenance.py         — Experiment manifest
+        release_gates.py      — Automatic paper_ready, fisher_verified
+        statistics.py         — Bootstrap confidence intervals
+    baselines/
+        dare.py               — DARE (legacy baseline)
+        ties.py               — TIES (legacy baseline)
+        dare_ties.py          — DARE-TIES (legacy baseline)
+    experimental/
+        agx/                  — AGX tournament search (frozen)
+        regmean/              — RegMean and RegMean++ (frozen)
+        kfac/                 — K-FAC structured merge (frozen)
+        surgery/              — Representation surgery (frozen)
+        trust_region/         — Trust-region constrained merge (frozen)
+        subspace/             — TSV/subspace merge (frozen)
+        coefficient_opt/      — Differentiable coefficient optimization (frozen)
+    cli/
+        main.py               — daph-merge CLI
+```
+
+### Design Principles
+
+1. **Single entry point**: All merging goes through `merge_experts()`
+2. **Operator trace provenance**: Every merge records exactly which operators ran
+3. **Fail-closed Fisher**: Missing curvature data raises `MissingCurvatureError`,
+   not silent fallback
+4. **Constrained optimization**: Model selection respects both specialist retention
+   AND general capability preservation
+5. **Experimental isolation**: Premature research modules are frozen under
+   `experimental/` until the production TA path is exhausted
+
+---
+
+## Experimental Results
+
+Current validation results (DistilGPT2, 3 experts: math, planning, coding):
+
+| Method | Mean Retention | Worst Domain | General Regression |
+|--------|---------------|-------------|-------------------|
+| **Task Arithmetic** | **0.795** | 0.752 | 0.557 |
+| Weighted TA | 0.795 | 0.752 | 0.557 |
+| DARE | 0.793 | 0.755 | 0.573 |
+| TIES magnitude | 0.789 | 0.762 | 0.325 |
+| DARE-TIES | 0.768 | 0.743 | 0.294 |
+| TIES-Fisher | 0.767 | 0.739 | 0.247 |
+| Fisher | 0.651 | 0.587 | 0.046 |
+| AGX-H | 0.584 | 0.546 | 0.001 |
+
+**Key finding**: Task Arithmetic wins on specialist retention. The optimization
+problem is not "maximize retention" but "retain ~80% specialist gains without
+destroying general capability."
+
+### Known Issue: Coding Validation→Test Collapse
+
+Coding retention drops from 75.2% (validation) to 45.4% (test).
+Root causes identified:
+- 8.5-12% prompt-code mismatches in the training data
+- Test NLL degradation (merged: 2.745 vs validation: 2.278)
+
+This is the current research priority — see `scripts/investigate_coding_collapse.py`.
+
+---
+
+## Testing
+
+```bash
+# Run all tests
+python -m pytest tests/ -q
+
+# Run only v3 tests
+python -m pytest tests/test_v3_*.py -q
+
+# Run with verbose output
+python -m pytest tests/ -v
+```
+
+Test categories:
+- `test_v3_types.py` — Canonical types, enums, task vectors, family classification
+- `test_v3_fisher.py` — Exact Fisher, dense merge, base-anchored, stabilization
+- `test_v3_regmean.py` — RegMean solver, eligibility, integration
+- `test_v3_task_search.py` — Simplex grid, TA-0 through TA-3, constraints
+- `test_v3_research_contracts.py` — Operator trace contracts, release gates
+- `test_v3_geometry.py` — Spectral, interactions, profiler, activations
+- `test_cka_correctness.py` — CKA token-observation layout
+- `test_validation_holdout.py` — Split integrity
+- `test_experimental_truth.py` — Experimental validity checks
+
+---
+
+## CLI
+
+```bash
+# Run a merge experiment
+daph-merge run config.yaml
+
+# Compute Fisher diagonals
+daph-merge fisher --estimator exact_per_sample --samples 512
+
+# Collect activation covariance
+daph-merge activations --mode diagonal
+
+# Run AGX search (experimental)
+daph-merge search config.yaml
+
+# Verify release gates
+daph-merge verify
+```
+
+---
+
+## Provenance & Release Gates
+
+Every merge produces an `OperatorTrace` recording:
+- Method name
+- Operators executed (e.g., `["TASK_ARITHMETIC"]`)
+- Whether Fisher/activation covariance/DARE/TIES was used
+- Fisher estimator type (e.g., `exact_per_sample`)
+- Config hash for reproducibility
+
+Release gates are automatic:
 ```python
-import torch
-from daph_nesy_v1_0 import register_solver, VectorizedSymbolicExpert
+from daph_exfusion.validation.release_gates import ReleaseGates
 
-# Define custom vectorized PyTorch function over token ID tensors
-def custom_rot13_solver(token_ids: torch.Tensor) -> torch.Tensor:
-    # Rotate lowercase ASCII characters ('a'-'z', 97-122) by 13
-    is_lower = (token_ids >= 97) & (token_ids <= 122)
-    rotated = ((token_ids - 97 + 13) % 26) + 97
-    return torch.where(is_lower, rotated, token_ids)
-
-# Register with domain name
-register_solver("rot13", custom_rot13_solver)
-
-# Instantiate expert using custom solver
-expert = VectorizedSymbolicExpert(
-    hidden_size=768,
-    vocab_size=32000,
-    lm_head_weight=torch.randn(32000, 768),
-    domain="rot13",
+gates = ReleaseGates(
+    full_tests_pass=True,
+    checkpoints_verified=True,
+    split_integrity_verified=True,
+    # ...
 )
+print(gates.paper_ready)        # True only if ALL gates pass
+print(gates.paper_ready_reason) # Human-readable explanation
 ```
 
 ---
 
-### Grammar Logit Masking
+## Legacy
 
-```python
-import torch
-from daph_nesy_v1_0 import NeSyOutputVerifier
-
-# Initialize verifier for '(' (40) and ')' (41)
-verifier = NeSyOutputVerifier(open_token=40, close_token=41)
-
-# Sequence state: [ "(" ] (1 open bracket)
-generated_ids = torch.tensor([[40]])
-next_logits = torch.randn(1, 32000)
-
-# Mask logits to encourage closing brackets and forbid premature closing
-corrected_logits = verifier.verify_and_correct_logits(generated_ids, next_logits)
-```
+v2.5 sparse merge results are archived under `legacy/v2_5/` with relabeled
+method names. The old "Fisher" was delta-squared weighting, "ExFusion" was
+DARE-delta2-trim, and "AGX" was a heuristic proxy. Do not cite v2.5 results
+as validated.
 
 ---
 
-## 🤖 Pretrained Model & Merging Runners
+## License
 
-### 1. Neurosymbolic Integration Runner (`run_model.py`)
-
-A full end-to-end integration script [run_model.py](run_model.py) is included in the repository. It:
-
-1. Downloads `distilbert/distilgpt2` from Hugging Face Hub.
-2. Runs standard neural generation on text prompts.
-3. Connects the Hugging Face tokenizer to `TokenizerBoundRulesEngine`.
-4. Executes the full **DAPH NeSy-MoE v1.1 Dual-System Engine**.
-
-Run it via:
-
-```bash
-python3 run_model.py
-```
-
-### 2. Multi-Model ExFusion Merging Runner (`run_model_merge.py`)
-
-An automated multi-expert model merging pipeline runner [run_model_merge.py](run_model_merge.py). It:
-
-1. Downloads 3 distinct fine-tuned expert models + 1 base model from Hugging Face Hub:
-   - Base: `distilbert/distilgpt2`
-   - Expert 1: `postbot/distilgpt2-emailgen` (Email / Business Writing)
-   - Expert 2: `FredZhang7/distilgpt2-stable-diffusion` (Art / Prompt Generation)
-   - Expert 3: `misterkilgore/distilgpt2-psy-ita` (Psychology & Dialogue)
-2. Executes the DAPH ExFusion Pipeline (`DARE Preprocessing` $\rightarrow$ `TIES v2 Sign Election` $\rightarrow$ `Fisher Diagonal Weighting`).
-3. Applies merged parameter deltas directly to a target model container.
-4. Generates text across all individual experts, the base model, and the unified merged model.
-
-Run it via:
-
-```bash
-python3 run_model_merge.py
-```
-
-### 3. Quantitative Evaluation & Experiment Suite (`run_experiments.py`)
-
-An automated quantitative evaluation and scale sweep suite [run_experiments.py](run_experiments.py). It:
-
-1. Builds calibration datasets (150 samples/domain) and held-out evaluation sets (150 samples/domain).
-2. Measures baseline shift cross-entropy NLL and perplexity for the base model and individual experts.
-3. Computes explicit task vector interference metrics (cosine similarity, 72.01% sign conflict ratio, task vector norms).
-4. Executes multi-scale sweeps ($\lambda \in [0.0, 1.0]$) across merge baselines (Simple Task Arithmetic, Plain Averaging, TIES-only, DARE+TIES, Fisher-only, and Full ExFusion).
-5. Computes Domain Retention Scores $R_d(\lambda)$ and saves machine-readable JSON artifacts (`artifacts/experiment_results.json`).
-
-Run it via:
-
-```bash
-python3 run_experiments.py
-```
-
----
-
-## 🧪 Verification & Testing
-
-The workspace features comprehensive self-testing scripts verifying all 5 router paths, gradient propagation through STE, rules engines, and model merging routines.
-
-### Run Unit Tests
-
-```bash
-python3 test_nesy_v1_0.py
-```
-
-### Run Model Merging & ExFusion Engine Self-Tests
-
-```bash
-python3 daph_hybrid_exfusion_v2_3.py
-```
-
-### Test Results
-
-```
-Running DAPH NeSy-MoE v1.1 Extended test suite...
-1. symbolic priors mandate paths before softmax: OK
-2. tokenizer-bound rules engine: OK
-3. vectorized symbolic expert & domain solvers: OK
-4. output verifier guardrails: OK
-5. end-to-end NeSyDecoderLayer: OK
-6. re_embed alignment: OK
-7. over-closed bracket guardrail: OK
-8. subword vocabulary mapping: OK
-9. subword sequence bridge: OK
-10. expanded grammar verifiers (JSON, SQL, FSM): OK
-11. layer-selective routing topology: OK
-
-All 11 NeSy-MoE v1.1 Extended tests passed (executed live).
-```
-
----
-
-## 📁 Repository Directory Structure
-
-```
-.
-├── daph_nesy_v1_0.py          # Primary NeSy-MoE v1.1 Extended module
-├── daph_hybrid_exfusion_v2_3.py # Base DAPH Mamba/Attention Hybrid & Model Merging
-├── test_nesy_v1_0.py          # Live test suite (11 comprehensive test groups)
-├── benchmark_nesy.py          # Automated performance & VRAM profiling suite
-├── run_experiments.py         # Quantitative experiment runner & RESULTS.md generator
-├── run_model.py               # Pretrained Hugging Face model runner & NeSy pipeline
-├── run_model_merge.py         # Multi-expert Hugging Face model merging runner
-├── artifacts/                 # Saved experiment evaluation artifacts & JSON sweep data
-├── RESULTS.md                 # Official live test, benchmark & merging results
-├── ISSUES.md                  # Issues tracking & architectural roadmap
-├── README.md                  # Detailed architecture & API documentation
-├── LICENSE                    # Apache License 2.0
-└── .gitignore                 # Python & PyTorch cache ignores
-```
-
----
-
-## 𝛴 Mathematical Foundations
-
-### 1. Symbolic Prior Logit Additivity
-
-Given neural router logits $\mathbf{z}_{\text{neural}} \in \mathbb{R}^P$ and symbolic prior bias $\mathbf{b}_{\text{symbolic}} \in \mathbb{R}^P$:
-$$\mathbf{p}_{\text{route}} = \text{Softmax}(\mathbf{z}_{\text{neural}} + \mathbf{b}_{\text{symbolic}})$$
-
-### 2. Straight-Through Estimator (STE) Re-Embedding
-
-Let $\mathbf{h} \in \mathbb{R}^H$ be the input hidden state, $W_{\text{de}} \in \mathbb{R}^{V \times H}$ the de-embedding weight, and $E \in \mathbb{R}^{V \times H}$ the token embedding matrix.
-$$\mathbf{p}_{\text{vocab}} = \text{Softmax}(W_{\text{de}} \mathbf{h})$$
-$$\hat{y} = \text{Argmax}(\mathbf{p}_{\text{vocab}}) \xrightarrow{\text{Solver}} y^*$$
-$$\mathbf{e}_{\text{STE}} = \left( \text{OneHot}(y^*) - \mathbf{p}_{\text{vocab}} \right).\text{detach}() + \mathbf{p}_{\text{vocab}}$$
-$$\mathbf{h}_{\text{symbolic}} = \mathbf{e}_{\text{STE}} E$$
-
-### 3. Context Preservation Gating
-
-$$\mathbf{h}_{\text{out}} = \text{LayerNorm}\left( (1 - \sigma(\alpha)) \cdot \mathbf{h}_{\text{symbolic}} + \sigma(\alpha) \cdot \mathbf{h} \right)$$
-where $\alpha \in \mathbb{R}$ is a learnable gate initialized to $0.1$.
-
-### 4. ExFusion Model Construction Optimization Objective
-
-For base model parameters $\theta_B$ and expert task vectors $\Delta_i = \theta_i - \theta_B$:
-$$\max_{\theta^*} \left[ \sum_{d=1}^D R_d(\theta^*) - \alpha \cdot I(\theta^*) - \beta \cdot D_B(\theta^*) \right]$$
-where Domain Retention Score $R_d(\lambda)$ is defined over shift cross-entropy NLL:
-$$R_d(\lambda) = \frac{\text{NLL}_{\text{base}, d} - \text{NLL}_{\text{merged}, d}(\lambda)}{\text{NLL}_{\text{base}, d} - \text{NLL}_{\text{expert}, d}} \times 100\%$$
-
-### 5. TIES v2 Pure Sign Consensus & Fisher Weighting
-
-Given trimmed task vectors $\tilde{\Delta}_i$ and expert weights $w_i$:
-$$\text{Vote} = \sum_{i=1}^E w_i \cdot \text{Sign}(\tilde{\Delta}_i), \quad \text{ElectedSign} = \text{Sign}(\text{Vote})$$
-$$\Delta_{\text{TIES}} = \frac{\sum_{i=1}^E w_i \cdot \tilde{\Delta}_i \cdot \mathbf{1}_{\text{Sign}(\tilde{\Delta}_i) = \text{ElectedSign}}}{\max\left(\sum_{i=1}^E w_i \cdot \mathbf{1}_{\text{Sign}(\tilde{\Delta}_i) = \text{ElectedSign}}, \epsilon\right)}$$
-Empirical Fisher diagonal matrix elements $F_{kk} = \frac{1}{N} \sum_{n=1}^N \left( \frac{\partial \mathcal{L}_n}{\partial \theta_k} \right)^2$ modulate the Fisher merged delta:
-$$\Delta_{\text{Fisher}} = \frac{\sum_{i=1}^E w_i \cdot F_{i, kk}^\gamma \cdot \tilde{\Delta}_{i, k}}{\max\left(\sum_{i=1}^E w_i \cdot F_{i, kk}^\gamma \cdot M_{\text{DARE}, i, k}, \epsilon\right)}$$
-
----
-
-## 📄 License & Citation
-
-Distributed under the **Apache License 2.0**. See [LICENSE](LICENSE) for more information.
-
-```bibtex
-@software{daph_nesy_moe_2026,
-  author = {Dawson Block},
-  title = {DAPH NeSy-MoE: Differentiable Adaptive Predictive Hybrid Neurosymbolic Mixture-of-Experts},
-  year = {2026},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/dawsonblock/Daph_fusion}}
-}
-```
+Apache 2.0

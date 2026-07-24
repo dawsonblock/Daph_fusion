@@ -108,7 +108,7 @@ def cmd_search(args: argparse.Namespace) -> int:
         print("  [DRY RUN]")
         return 0
     print("  Use the Python API:")
-    print("    from daph_exfusion.search.agx import merge_agx")
+    print("    from daph_exfusion.experimental.agx.agx import merge_agx")
     return 1
 
 

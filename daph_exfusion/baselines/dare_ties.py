@@ -9,8 +9,8 @@ from typing import List, Optional
 import torch
 from torch import Tensor
 
-from daph_exfusion.merge.legacy.dare import op_dare
-from daph_exfusion.merge.legacy.ties import op_ties
+from daph_exfusion.baselines.dare import op_dare
+from daph_exfusion.baselines.ties import op_ties
 
 
 def op_dare_ties(

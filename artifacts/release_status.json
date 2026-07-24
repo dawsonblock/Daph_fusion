@@ -1,6 +1,6 @@
 {
-  "release": "v3.0.0-dense-merge-dev",
-  "previous_release": "v2.6.0-experimental-truth",
+  "release": "v3.1.0-optimized-task-arithmetic",
+  "previous_release": "v3.0.0-dense-merge-dev",
   "runtime_correctness": "pass",
   "experimental_validity": "invalid_for_v2_5_results",
   "qualified_experts": true,
@@ -9,9 +9,11 @@
   "paper_ready": false,
   "fisher_verified": false,
   "agx_verified": false,
-  "paper_ready_reason": "v3.0 dense-merge program in development. v2.5 sparse results archived under legacy/v2_5/ with relabeled method names. Old 'fisher' was delta-squared weighting, 'exfusion' was DARE-delta2-trim, 'agx' was heuristic proxy. Do not cite v2.5 results as validated.",
+  "paper_ready_reason": "v3.1 optimized Task Arithmetic pipeline. Production path is TA-0 through TA-3 with simplex grid search and constrained objective. AGX and other experimental methods frozen under experimental/. v2.5 sparse results archived under legacy/v2_5/ with relabeled method names. Known issue: coding validation→test collapse (75.2%→45.4%) due to prompt-code mismatches in training data. Weighted TA grid search not yet executed on real experts.",
   "known_blockers": [
-    "agx_s_search_not_executed",
+    "weighted_ta_grid_search_not_executed",
+    "coding_validation_test_collapse_unresolved",
+    "artifact_inconsistency_merge_scale_0_5_vs_0_6",
     "checkpoints_not_in_archive",
     "results_need_independent_regeneration"
   ],
@@ -41,7 +43,13 @@
     "search_geometry_hardcoded_result",
     "no_canonical_merge_api",
     "no_curvature_bank",
-    "release_metadata_v2_4_v2_5_inconsistent"
+    "release_metadata_v2_4_v2_5_inconsistent",
+    "fisher_silent_fallback_contaminating_provenance",
+    "coefficient_opt_gpu_device_mismatch",
+    "coefficient_opt_evaluator_contradiction",
+    "coarse_family_partitioning",
+    "no_weighted_ta_grid_search",
+    "stale_readme_describing_v2_5_architecture"
   ],
   "gates": {
     "P0_runtime_correctness": "pass",
@@ -56,7 +64,7 @@
     "merge": "pass",
     "agx": "pass"
   },
-  "test_count": 158,
+  "test_count": 288,
   "experiment_results": {
     "best_method_by_retention": "task_arithmetic",
     "best_method_by_retention_regression_ratio": "TIES_FISHER",
@@ -81,5 +89,19 @@
     "fisher": "legacy_delta_squared_weighting",
     "exfusion": "legacy_dare_delta2_trim",
     "agx": "legacy_heuristic_agx"
+  },
+  "v3_1_architecture": {
+    "production_modes": ["TA-0", "TA-1", "TA-2", "TA-3"],
+    "production_path": "merge/task_search.py + merge/task_arithmetic.py + merge/fisher_dense.py",
+    "experimental_frozen": ["agx", "regmean", "regmean_pp", "kfac", "surgery", "trust_region", "subspace", "coefficient_opt"],
+    "experimental_location": "experimental/",
+    "baselines_location": "baselines/",
+    "constrained_objective": "max R_mean s.t. R_min >= 0.70 and G_regression <= 0.25",
+    "grid_search": "simplex grid at 0.1 resolution (66 points for 3 experts) x 5 scales = 330 configs",
+    "coding_collapse": {
+      "validation_retention": 0.7522,
+      "test_retention": 0.4540,
+      "root_causes": ["prompt_code_mismatches_8_to_12_percent", "test_nll_degradation"]
+    }
   }
 }

@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple
 
-from daph_exfusion.search.pareto import (
+from daph_exfusion.experimental.agx.pareto import (
     CandidateEvaluation,
     CandidateObjectives,
     rank_candidates,

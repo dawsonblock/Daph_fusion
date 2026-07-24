@@ -265,8 +265,8 @@ class TestAGXOperatorDispatch:
 
     def test_ties_candidate_executes_ties_not_raw(self):
         """When AGX chooses TIES, it must execute TIES (not RAW task arithmetic)."""
-        from daph_exfusion.search.optimization import apply_layer_merge_operator
-        from daph_exfusion.search.candidate import LayerMergeConfig
+        from daph_exfusion.experimental.agx.optimization import apply_layer_merge_operator
+        from daph_exfusion.experimental.agx.candidate import LayerMergeConfig
 
         # Create base and expert layers
         base_layer = nn.Linear(10, 10)
@@ -299,7 +299,7 @@ class TestAGXOperatorDispatch:
 
     def test_fisher_candidate_requires_fisher_diagonals(self):
         """When AGX chooses FISHER without Fisher data, it must raise."""
-        from daph_exfusion.search.optimization import apply_layer_merge_operator
+        from daph_exfusion.experimental.agx.optimization import apply_layer_merge_operator
 
         base_layer = nn.Linear(10, 10)
         expert1 = nn.Linear(10, 10)

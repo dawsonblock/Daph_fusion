@@ -162,6 +162,7 @@ class MergeConfig:
     fisher_floor_eps: float = 1e-8
     fisher_log_alpha: float = 1.0
     fisher_clip_quantile: float = 0.999
+    allow_missing_fisher: bool = False
     # RegMean
     regmean_ridge: float = 1e-4                # ρ
     regmean_mode: RegMeanMode = RegMeanMode.DIAGONAL
@@ -381,6 +382,91 @@ def classify_parameter_family(param_name: str, layer_idx: int = -1, num_layers: 
     return "other"
 
 
+FINE_FAMILIES = (
+    "attention",
+    "ssm",
+    "ffn",
+    "norm",
+    "embedding",
+    "lm_head",
+    "router",
+    "other",
+)
+
+
+def classify_parameter_family_fine(name: str) -> str:
+    """Classify a parameter into one of the 8 fine-grained families.
+
+    Used by family-weighted Task Arithmetic (TA-3). The order of checks
+    matters: embedding, lm_head, norm, router, ssm, attention, ffn, other.
+
+    Families: attention, ssm, ffn, norm, embedding, lm_head, router, other.
+    """
+    name_lower = name.lower()
+
+    # 1. embedding (covers embed_tokens, wte, position_embeddings)
+    if "embed" in name_lower:
+        return "embedding"
+
+    # 2. lm_head (covers lm_head, cls head, tied wte weights)
+    if "lm_head" in name_lower or "cls" in name_lower or "wte" in name_lower:
+        return "lm_head"
+
+    # 3. norm (covers layernorm, rmsnorm, ln)
+    if "norm" in name_lower or "ln" in name_lower or "layernorm" in name_lower:
+        return "norm"
+
+    # 4. router (covers router / gate, but NOT mlp.gate_proj which is ffn)
+    if "router" in name_lower or ("gate" in name_lower and "mlp" not in name_lower):
+        return "router"
+
+    # 5. ssm (covers ssm, a_log, dt_proj, conv-with-ssm)
+    if (
+        "ssm" in name_lower
+        or "a_log" in name_lower
+        or "dt_proj" in name_lower
+        or ("conv" in name_lower and "ssm" in name_lower)
+    ):
+        return "ssm"
+
+    # 6. attention (checked before ffn so c_proj → attention)
+    if any(
+        k in name_lower
+        for k in (
+            "attn",
+            "attention",
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "c_attn",
+            "c_proj",
+            "query",
+            "key",
+            "value",
+        )
+    ):
+        return "attention"
+
+    # 7. ffn (covers mlp, ffn, gate_proj, up_proj, down_proj, c_fc, c_proj)
+    if any(
+        k in name_lower
+        for k in (
+            "mlp",
+            "ffn",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
+            "c_fc",
+            "c_proj",
+        )
+    ):
+        return "ffn"
+
+    # 8. other
+    return "other"
+
+
 def get_layer_index(param_name: str) -> int:
     """Extract layer index from a parameter name like 'model.layers.5.attn.q_proj.weight'."""
     parts = param_name.split(".")
@@ -457,3 +543,17 @@ def validate_ssm_stability(model: nn.Module) -> Dict[str, Any]:
                 results["valid"] = False
 
     return results
+
+
+# =============================================================================
+# Re-export: MissingCurvatureError
+# =============================================================================
+# Imported at the end of the module to avoid a circular import: fisher_dense
+# imports names from this module (MergeConfig, MergeMethod, ...), which are
+# all defined above, so by the time this line runs they are available on the
+# partially-loaded ``daph_exfusion.merge.types`` module.
+from daph_exfusion.merge.fisher_dense import MissingCurvatureError  # noqa: E402,F401
+
+__all__ = [
+    "MissingCurvatureError",
+]

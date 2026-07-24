@@ -25,7 +25,7 @@ from daph_exfusion.geometry.operators import (
     transform_single_delta,
     transform_expert_set,
 )
-from daph_exfusion.search.candidate import LayerMergeConfig, MergeCandidate
+from daph_exfusion.experimental.agx.candidate import LayerMergeConfig, MergeCandidate
 
 
 def generate_random_layerwise_candidate(

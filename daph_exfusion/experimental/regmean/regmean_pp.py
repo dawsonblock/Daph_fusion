@@ -38,7 +38,7 @@ from daph_exfusion.merge.types import (
     extract_task_vectors,
     validate_parameter_names,
 )
-from daph_exfusion.merge.regmean import regmean_solve, is_regmean_eligible
+from daph_exfusion.experimental.regmean.regmean import regmean_solve, is_regmean_eligible
 
 
 _KFAC_EXCLUDE_PATTERNS = (

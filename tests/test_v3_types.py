@@ -25,6 +25,8 @@ from daph_exfusion.merge.types import (
     extract_task_vectors,
     validate_parameter_names,
     classify_parameter_family,
+    classify_parameter_family_fine,
+    FINE_FAMILIES,
     get_layer_index,
     count_layers,
     validate_ssm_stability,
@@ -250,6 +252,50 @@ class TestParameterFamily:
 
     def test_ssm_projections(self):
         assert classify_parameter_family("model.layers.0.ssm.in_proj.weight") == "ssm_projections"
+
+
+class TestParameterFamilyFine:
+    def test_fine_families_constant(self):
+        assert FINE_FAMILIES == (
+            "attention",
+            "ssm",
+            "ffn",
+            "norm",
+            "embedding",
+            "lm_head",
+            "router",
+            "other",
+        )
+
+    def test_embedding(self):
+        assert classify_parameter_family_fine("model.embed_tokens.weight") == "embedding"
+
+    def test_lm_head(self):
+        assert classify_parameter_family_fine("lm_head.weight") == "lm_head"
+
+    def test_norm(self):
+        assert classify_parameter_family_fine("model.layers.0.input_layernorm.weight") == "norm"
+
+    def test_attention(self):
+        assert classify_parameter_family_fine("model.layers.0.attn.q_proj.weight") == "attention"
+
+    def test_ffn_gate_proj(self):
+        assert classify_parameter_family_fine("model.layers.0.mlp.gate_proj.weight") == "ffn"
+
+    def test_ffn_down_proj(self):
+        assert classify_parameter_family_fine("model.layers.0.mlp.down_proj.weight") == "ffn"
+
+    def test_ssm_in_proj(self):
+        assert classify_parameter_family_fine("model.layers.0.ssm.in_proj.weight") == "ssm"
+
+    def test_ssm_a_log(self):
+        assert classify_parameter_family_fine("model.layers.0.ssm.a_log") == "ssm"
+
+    def test_router(self):
+        assert classify_parameter_family_fine("model.layers.0.router.weight") == "router"
+
+    def test_other(self):
+        assert classify_parameter_family_fine("some.unknown.param") == "other"
 
 
 # =============================================================================

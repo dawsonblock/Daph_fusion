@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 
 from daph_exfusion.merge.types import MergeConfig, MergeMethod, RegMeanMode
-from daph_exfusion.merge.regmean import (
+from daph_exfusion.experimental.regmean.regmean import (
     merge_regmean, regmean_solve, is_regmean_eligible,
 )
 

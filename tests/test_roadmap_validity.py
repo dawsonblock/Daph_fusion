@@ -16,8 +16,8 @@ from daph_exfusion.geometry.descriptors import (
     compute_sign_conflict_ratio,
 )
 from daph_exfusion.geometry.hierarchy import compute_global_geometry
-from daph_exfusion.search.candidate import LayerMergeConfig, MergeCandidate
-from daph_exfusion.search.pareto import ParetoFrontier
+from daph_exfusion.experimental.agx.candidate import LayerMergeConfig, MergeCandidate
+from daph_exfusion.experimental.agx.pareto import ParetoFrontier
 from experiments.qualification import ExpertQualificationPipeline, InvalidExperiment
 from research_metrics import calculate_retention
 
@@ -144,7 +144,7 @@ def test_offloaded_fisher_cpu_and_mmap_agree(tmp_path) -> None:
 
 
 def test_apply_layer_merge_operator_raw() -> None:
-    from daph_exfusion.search.optimization import apply_layer_merge_operator
+    from daph_exfusion.experimental.agx.optimization import apply_layer_merge_operator
 
     torch.manual_seed(1)
     base = nn.Linear(4, 4)
@@ -169,8 +169,8 @@ def test_apply_layer_merge_operator_raw() -> None:
 
 
 def test_layerwise_search_engine_rejects_high_drift() -> None:
-    from daph_exfusion.search.candidate import LayerMergeConfig, MergeCandidate
-    from daph_exfusion.search.optimization import LayerwiseGeometrySearchEngine
+    from daph_exfusion.experimental.agx.candidate import LayerMergeConfig, MergeCandidate
+    from daph_exfusion.experimental.agx.optimization import LayerwiseGeometrySearchEngine
 
     torch.manual_seed(2)
 

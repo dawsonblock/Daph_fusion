@@ -343,8 +343,11 @@ def merge_coefficient_opt(
     granularity = config.coefficient_granularity
     parameterization = config.coefficient_parameterization
 
-    base_model.to(device)
-    base_model.eval()
+    # Use a deepcopy on the device for functional_call forward passes so the
+    # original base_model is never mutated back and forth (which causes device
+    # mismatches on GPU). base_cpu stays on CPU for task vector extraction.
+    working_model = copy.deepcopy(base_model).to(device)
+    working_model.eval()
 
     base_cpu = base_model.cpu()
     for e in experts:
@@ -353,14 +356,14 @@ def merge_coefficient_opt(
 
     base_params: Dict[str, Tensor] = {
         name: p.detach().float().to(device)
-        for name, p in base_model.named_parameters()
+        for name, p in working_model.named_parameters()
     }
     task_vectors: List[Dict[str, Tensor]] = [
         {name: tv.to(device) for name, tv in tv_dict.items()}
         for tv_dict in task_vectors_cpu
     ]
 
-    num_layers = count_layers(base_model)
+    num_layers = count_layers(working_model)
     param_names = list(base_params.keys())
     param_to_group = _build_param_to_group(param_names, granularity, num_layers)
     n_groups = _count_groups(granularity, num_layers, param_to_group)
@@ -391,7 +394,7 @@ def merge_coefficient_opt(
         total_loss = torch.tensor(0.0, device=device, dtype=torch.float32)
         n_batches = 0
         for batch in calibration_data:
-            output = _functional_forward(base_model, merged_params, batch, device)
+            output = _functional_forward(working_model, merged_params, batch, device)
             loss = _compute_loss(output, batch, evaluator, device)
             total_loss = total_loss + loss
             n_batches += 1
@@ -407,7 +410,7 @@ def merge_coefficient_opt(
         lambdas_final = _parameterize_coeffs(raw_coeffs, parameterization).detach()
         lambdas_cpu = lambdas_final.cpu()
 
-    merged = copy.deepcopy(base_model.cpu())
+    merged = copy.deepcopy(base_cpu)
     merged_params_dict = dict(merged.named_parameters())
 
     with torch.no_grad():

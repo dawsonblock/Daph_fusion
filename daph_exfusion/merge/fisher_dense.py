@@ -47,6 +47,35 @@ from daph_exfusion.merge.types import (
 
 
 # =============================================================================
+# Exceptions
+# =============================================================================
+
+
+class MissingCurvatureError(Exception):
+    """Raised when Fisher curvature data is missing for an expert/parameter.
+
+    By default (``config.allow_missing_fisher == False``) the Fisher merge
+    fails closed rather than silently falling back to a uniform weight of
+    ``ones_like``, which would contaminate provenance by pretending real
+    curvature information was used when it was not.
+
+    Attributes:
+        expert: The expert key (e.g. ``"expert_0"``) missing curvature.
+        parameter: The parameter name missing curvature.
+    """
+
+    def __init__(self, expert: str, parameter: str):
+        self.expert = expert
+        self.parameter = parameter
+        super().__init__(
+            f"Missing Fisher curvature for expert='{expert}', "
+            f"parameter='{parameter}'. Set config.allow_missing_fisher=True "
+            f"to allow a silent uniform fallback (not recommended; "
+            f"contaminates provenance)."
+        )
+
+
+# =============================================================================
 # Exact empirical Fisher (micro_batch=1)
 # =============================================================================
 
@@ -312,7 +341,12 @@ def merge_fisher_dense(
                                              clip_quantile=config.fisher_clip_quantile)
                         fishers.append(f.pow(gamma) * lambdas[i])
                     else:
-                        fishers.append(torch.ones_like(tv[name]) * lambdas[i])
+                        if config.allow_missing_fisher:
+                            fishers.append(torch.ones_like(tv[name]) * lambdas[i])
+                        else:
+                            raise MissingCurvatureError(
+                                expert=expert_key, parameter=name
+                            )
 
             if not deltas:
                 continue
@@ -422,7 +456,12 @@ def merge_fisher_base_anchored(
                                              clip_quantile=config.fisher_clip_quantile)
                         expert_fishers.append(f.pow(gamma) * lambdas[i])
                     else:
-                        expert_fishers.append(torch.ones_like(tv[name]) * lambdas[i])
+                        if config.allow_missing_fisher:
+                            expert_fishers.append(torch.ones_like(tv[name]) * lambdas[i])
+                        else:
+                            raise MissingCurvatureError(
+                                expert=expert_key, parameter=name
+                            )
 
             if not deltas:
                 continue

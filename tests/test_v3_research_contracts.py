@@ -22,9 +22,9 @@ from daph_exfusion.merge.task_arithmetic import merge_task_arithmetic, merge_fro
 from daph_exfusion.merge.fisher_dense import (
     merge_fisher_dense, merge_fisher_base_anchored, build_exact_fisher,
 )
-from daph_exfusion.merge.regmean import merge_regmean
-from daph_exfusion.merge.subspace import merge_subspace
-from daph_exfusion.merge.legacy import op_dare, op_ties
+from daph_exfusion.experimental.regmean.regmean import merge_regmean
+from daph_exfusion.experimental.subspace.subspace import merge_subspace
+from daph_exfusion.baselines import op_dare, op_ties
 
 
 class TinyLM(nn.Module):

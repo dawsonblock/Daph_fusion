@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from daph_exfusion.search.candidate import LayerMergeConfig, MergeCandidate
+from daph_exfusion.experimental.agx.candidate import LayerMergeConfig, MergeCandidate
 
 
 # Default layer groups for a distilgpt2-style model

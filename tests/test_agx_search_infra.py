@@ -4,25 +4,25 @@ import pytest
 import torch
 import torch.nn as nn
 
-from daph_exfusion.search.groupwise import (
+from daph_exfusion.experimental.agx.groupwise import (
     GroupCandidate,
     GroupMergeConfig,
     generate_random_group_candidate,
     classify_layer_group,
     DEFAULT_LAYER_GROUPS,
 )
-from daph_exfusion.search.pareto import (
+from daph_exfusion.experimental.agx.pareto import (
     CandidateEvaluation,
     CandidateObjectives,
     compute_pareto_front,
     rank_candidates,
     scalar_utility,
 )
-from daph_exfusion.search.halving import (
+from daph_exfusion.experimental.agx.halving import (
     HalvingStages,
     successive_halving,
 )
-from daph_exfusion.search.surrogate import (
+from daph_exfusion.experimental.agx.surrogate import (
     TreeSurrogatePredictor,
     constrained_expected_improvement,
 )
@@ -30,7 +30,7 @@ from daph_exfusion.policies.adaptive_policy import (
     VariableNGeometryPolicy,
     AdaptiveGeometryPolicy,
 )
-from daph_exfusion.search.candidate_vocab import CandidateVocabularyRouter
+from daph_exfusion.experimental.agx.candidate_vocab import CandidateVocabularyRouter
 
 
 # Phase 12: groupwise search
