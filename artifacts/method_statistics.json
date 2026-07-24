@@ -26,14 +26,14 @@
       ]
     },
     "mean_nll": {
-      "coding": 3.7964308285396817,
-      "math": 4.668107028818724,
-      "planning": 4.505738563907957
+      "coding": 3.7963975177568896,
+      "math": 4.6680824121498965,
+      "planning": 4.505714490575698
     },
     "worst_domain_retention_mean": 0.0,
     "base_regression_mean": 0.0,
-    "repr_drift_mean": 5.960464477539063e-08,
-    "runtime_mean": 1.3650077819824218,
+    "repr_drift_mean": 0.0,
+    "runtime_mean": 3.5176050662994385,
     "n_seeds": 5,
     "n_valid": 5
   },
@@ -64,61 +64,61 @@
       ]
     },
     "mean_nll": {
-      "coding": 0.8292521982624563,
-      "math": 0.8993918074611805,
-      "planning": 0.589441572578208
+      "coding": 0.8292444624354053,
+      "math": 0.8993759725103734,
+      "planning": 0.5894363181104938
     },
     "worst_domain_retention_mean": 1.0,
     "base_regression_mean": 0.0,
     "repr_drift_mean": 0.0,
-    "runtime_mean": 0.647357988357544,
+    "runtime_mean": 0.0,
     "n_seeds": 5,
     "n_valid": 5
   },
   "task_arithmetic": {
     "method": "task_arithmetic",
     "mean_retention": {
-      "coding": 0.6069826458675,
-      "math": 0.6604151756127132,
-      "planning": 0.8078943522245222
+      "coding": 0.5904868053370144,
+      "math": 0.6967848026859015,
+      "planning": 0.8333220969464114
     },
     "std_retention": {
       "coding": 0.0,
       "math": 0.0,
-      "planning": 1.1102230246251565e-16
+      "planning": 0.0
     },
     "ci_retention": {
       "coding": [
-        0.6069826458675,
-        0.6069826458675
+        0.5904868053370144,
+        0.5904868053370144
       ],
       "math": [
-        0.6604151756127132,
-        0.6604151756127132
+        0.6967848026859015,
+        0.6967848026859015
       ],
       "planning": [
-        0.8078943522245222,
-        0.8078943522245222
+        0.8333220969464114,
+        0.8333220969464114
       ]
     },
     "mean_nll": {
-      "coding": 1.9954048927725072,
-      "math": 2.1791903040715765,
-      "planning": 1.3417843429787646
+      "coding": 2.044332789174145,
+      "math": 2.042105039224585,
+      "planning": 1.2421933516715338
     },
-    "worst_domain_retention_mean": 0.6069826458675,
-    "base_regression_mean": 0.0,
-    "repr_drift_mean": 7.271766662597656e-05,
-    "runtime_mean": 6.681875610351563,
+    "worst_domain_retention_mean": 0.5904868053370144,
+    "base_regression_mean": 0.40178407899729046,
+    "repr_drift_mean": 8.857250213623047e-05,
+    "runtime_mean": 2.2034090042114256,
     "n_seeds": 5,
     "n_valid": 5
   },
   "mean_merge": {
     "method": "mean_merge",
     "mean_retention": {
-      "coding": 0.3160382281734765,
-      "math": 0.3093621006061757,
-      "planning": 0.3311966368188157
+      "coding": 0.5366588243686418,
+      "math": 0.5082534775174131,
+      "planning": 0.6410520042273528
     },
     "std_retention": {
       "coding": 0.0,
@@ -127,226 +127,36 @@
     },
     "ci_retention": {
       "coding": [
-        0.3160382281734765,
-        0.3160382281734765
+        0.5366588243686418,
+        0.5366588243686418
       ],
       "math": [
-        0.3093621006061757,
-        0.3093621006061757
+        0.5082534775174131,
+        0.5082534775174131
       ],
       "planning": [
-        0.3311966368188157,
-        0.3311966368188157
+        0.6410520042273528,
+        0.6410520042273528
       ]
     },
     "mean_nll": {
-      "coding": 2.8586889515526646,
-      "math": 3.5022093713530866,
-      "planning": 3.2086741715958973
+      "coding": 2.2040486473662386,
+      "math": 2.7526242584608402,
+      "planning": 1.9951765190050437
     },
-    "worst_domain_retention_mean": 0.3093621006061757,
-    "base_regression_mean": 0.0,
-    "repr_drift_mean": 1.2278556823730469e-05,
-    "runtime_mean": 3.295846366882324,
+    "worst_domain_retention_mean": 0.5082534775174131,
+    "base_regression_mean": 0.0053028507513971385,
+    "repr_drift_mean": 4.1484832763671875e-05,
+    "runtime_mean": 2.3754226207733153,
     "n_seeds": 5,
     "n_valid": 5
   },
   "TIES": {
     "method": "TIES",
     "mean_retention": {
-      "coding": 0.4369991377461309,
-      "math": 0.4089646365787278,
-      "planning": 0.4568697492029804
-    },
-    "std_retention": {
-      "coding": 5.551115123125783e-17,
-      "math": 0.0,
-      "planning": 0.0
-    },
-    "ci_retention": {
-      "coding": [
-        0.4369991377461309,
-        0.4369991377461309
-      ],
-      "math": [
-        0.4089646365787278,
-        0.4089646365787278
-      ],
-      "planning": [
-        0.4568697492029804,
-        0.4568697492029804
-      ]
-    },
-    "mean_nll": {
-      "coding": 2.4997763255697887,
-      "math": 3.126835777947517,
-      "planning": 2.7165009396747477
-    },
-    "worst_domain_retention_mean": 0.4089646365787278,
-    "base_regression_mean": 0.0,
-    "repr_drift_mean": 2.2232532501220703e-05,
-    "runtime_mean": 23.722066259384157,
-    "n_seeds": 5,
-    "n_valid": 5
-  },
-  "DARE": {
-    "method": "DARE",
-    "mean_retention": {
-      "coding": 0.6059312979222182,
-      "math": 0.6558299622630474,
-      "planning": 0.8034654749215575
-    },
-    "std_retention": {
-      "coding": 0.0018906522429793906,
-      "math": 0.00515043527680183,
-      "planning": 0.0016858526875098859
-    },
-    "ci_retention": {
-      "coding": [
-        0.6043756497642808,
-        0.6076722627891027
-      ],
-      "math": [
-        0.6524904593756998,
-        0.6609961248830226
-      ],
-      "planning": [
-        0.8021448176769848,
-        0.8049514256531038
-      ]
-    },
-    "mean_nll": {
-      "coding": 1.998524429928733,
-      "math": 2.1964706674156345,
-      "planning": 1.359129141835333
-    },
-    "worst_domain_retention_mean": 0.6059312979222182,
-    "base_regression_mean": 0.0,
-    "repr_drift_mean": 7.387399673461915e-05,
-    "runtime_mean": 13.532743692398071,
-    "n_seeds": 5,
-    "n_valid": 5
-  },
-  "Fisher": {
-    "method": "Fisher",
-    "mean_retention": {
-      "coding": 0.43124661770523665,
-      "math": 0.4088780828943553,
-      "planning": 0.4520501331114765
-    },
-    "std_retention": {
-      "coding": 5.551115123125783e-17,
-      "math": 0.0,
-      "planning": 0.0
-    },
-    "ci_retention": {
-      "coding": [
-        0.43124661770523665,
-        0.43124661770523665
-      ],
-      "math": [
-        0.4088780828943553,
-        0.4088780828943553
-      ],
-      "planning": [
-        0.4520501331114765,
-        0.4520501331114765
-      ]
-    },
-    "mean_nll": {
-      "coding": 2.5168450801053717,
-      "math": 3.127161974135276,
-      "planning": 2.735375987673269
-    },
-    "worst_domain_retention_mean": 0.4088780828943553,
-    "base_regression_mean": 0.0,
-    "repr_drift_mean": 2.205371856689453e-05,
-    "runtime_mean": 15.134708261489868,
-    "n_seeds": 5,
-    "n_valid": 5
-  },
-  "DARE_TIES": {
-    "method": "DARE_TIES",
-    "mean_retention": {
-      "coding": 0.44640138045167144,
-      "math": 0.42061073385134345,
-      "planning": 0.4704446594859588
-    },
-    "std_retention": {
-      "coding": 0.0009951466195208167,
-      "math": 0.0026020476984629165,
-      "planning": 0.0008445404334706674
-    },
-    "ci_retention": {
-      "coding": [
-        0.44568590077830744,
-        0.4473766641766862
-      ],
-      "math": [
-        0.41864475158290393,
-        0.42303884559426674
-      ],
-      "planning": [
-        0.46970595058527226,
-        0.47118336838664526
-      ]
-    },
-    "mean_nll": {
-      "coding": 2.471878191937229,
-      "math": 3.0829449538867997,
-      "planning": 2.663337559375948
-    },
-    "worst_domain_retention_mean": 0.42061073385134345,
-    "base_regression_mean": 0.0,
-    "repr_drift_mean": 2.3925304412841796e-05,
-    "runtime_mean": 24.709352350234987,
-    "n_seeds": 5,
-    "n_valid": 5
-  },
-  "ExFusion": {
-    "method": "ExFusion",
-    "mean_retention": {
-      "coding": 0.4265270273577303,
-      "math": 0.4007528624938904,
-      "planning": 0.4432205046435003
-    },
-    "std_retention": {
-      "coding": 0.0008145107573329553,
-      "math": 0.0018649595436517309,
-      "planning": 0.0007138509018230305
-    },
-    "ci_retention": {
-      "coding": [
-        0.4258413466808751,
-        0.42728100650030154
-      ],
-      "math": [
-        0.39922156519318175,
-        0.402284159794599
-      ],
-      "planning": [
-        0.4425967860318477,
-        0.44382595663289076
-      ]
-    },
-    "mean_nll": {
-      "coding": 2.530848947728155,
-      "math": 3.1577836159353927,
-      "planning": 2.7699554350769633
-    },
-    "worst_domain_retention_mean": 0.4007528624938904,
-    "base_regression_mean": 0.0,
-    "repr_drift_mean": 2.1576881408691406e-05,
-    "runtime_mean": 25.318778610229494,
-    "n_seeds": 5,
-    "n_valid": 5
-  },
-  "AGX": {
-    "method": "AGX",
-    "mean_retention": {
-      "coding": 0.26951406894116403,
-      "math": 0.25434630073677394,
-      "planning": 0.2589330002287841
+      "coding": 0.5869454143623763,
+      "math": 0.662715378727818,
+      "planning": 0.7760064520345594
     },
     "std_retention": {
       "coding": 0.0,
@@ -355,27 +165,255 @@
     },
     "ci_retention": {
       "coding": [
-        0.26951406894116403,
-        0.26951406894116403
+        0.5869454143623763,
+        0.5869454143623763
       ],
       "math": [
-        0.25434630073677394,
-        0.25434630073677394
+        0.662715378727818,
+        0.662715378727818
       ],
       "planning": [
-        0.2589330002287841,
-        0.2589330002287841
+        0.7760064520345594,
+        0.7760064520345594
       ]
     },
     "mean_nll": {
-      "coding": 2.996734442618397,
-      "math": 3.709548253736061,
-      "planning": 3.4916800341559844
+      "coding": 2.05484063822463,
+      "math": 2.170502696690223,
+      "planning": 1.4666573607805864
     },
-    "worst_domain_retention_mean": 0.25434630073677394,
-    "base_regression_mean": 0.0,
-    "repr_drift_mean": 7.62939453125e-06,
-    "runtime_mean": 21.36997232437134,
+    "worst_domain_retention_mean": 0.5869454143623763,
+    "base_regression_mean": 0.23431985804784747,
+    "repr_drift_mean": 7.396936416625977e-05,
+    "runtime_mean": 3.508896541595459,
+    "n_seeds": 5,
+    "n_valid": 5
+  },
+  "DARE": {
+    "method": "DARE",
+    "mean_retention": {
+      "coding": 0.5883653807006147,
+      "math": 0.6945917046218002,
+      "planning": 0.8306285661953867
+    },
+    "std_retention": {
+      "coding": 0.00152374623471236,
+      "math": 0.002940816471414827,
+      "planning": 0.0013557491733229628
+    },
+    "ci_retention": {
+      "coding": [
+        0.5872338209655175,
+        0.5898624124322351
+      ],
+      "math": [
+        0.6919084024415938,
+        0.6970255058174157
+      ],
+      "planning": [
+        0.8294030015423559,
+        0.8317738246480001
+      ]
+    },
+    "mean_nll": {
+      "coding": 2.0506273807656727,
+      "math": 2.050370182021525,
+      "planning": 1.2527419673586355
+    },
+    "worst_domain_retention_mean": 0.5883653807006147,
+    "base_regression_mean": 0.40732051996595453,
+    "repr_drift_mean": 8.83936882019043e-05,
+    "runtime_mean": 3.282670593261719,
+    "n_seeds": 5,
+    "n_valid": 5
+  },
+  "Fisher": {
+    "method": "Fisher",
+    "mean_retention": {
+      "coding": 0.5993916979641299,
+      "math": 0.6969886612796461,
+      "planning": 0.776679037031837
+    },
+    "std_retention": {
+      "coding": 0.0,
+      "math": 0.0,
+      "planning": 0.0
+    },
+    "ci_retention": {
+      "coding": [
+        0.5993916979641299,
+        0.5993916979641299
+      ],
+      "math": [
+        0.6969886612796461,
+        0.6969886612796461
+      ],
+      "planning": [
+        0.776679037031837,
+        0.776679037031837
+      ]
+    },
+    "mean_nll": {
+      "coding": 2.0179106098082893,
+      "math": 2.041336756029564,
+      "planning": 1.4640233308366202
+    },
+    "worst_domain_retention_mean": 0.5993916979641299,
+    "base_regression_mean": 0.23911073895445076,
+    "repr_drift_mean": 7.593631744384766e-05,
+    "runtime_mean": 3.344428205490112,
+    "n_seeds": 5,
+    "n_valid": 5
+  },
+  "DARE_TIES": {
+    "method": "DARE_TIES",
+    "mean_retention": {
+      "coding": 0.5613734723359503,
+      "math": 0.679932672366285,
+      "planning": 0.7841952445939826
+    },
+    "std_retention": {
+      "coding": 0.005061528928740396,
+      "math": 0.0049233523523247655,
+      "planning": 0.003677918699348739
+    },
+    "ci_retention": {
+      "coding": [
+        0.5577065879817812,
+        0.5661406445668928
+      ],
+      "math": [
+        0.6758253033995948,
+        0.6841128917497429
+      ],
+      "planning": [
+        0.7806226107054185,
+        0.7875406345752113
+      ]
+    },
+    "mean_nll": {
+      "coding": 2.1307165041388436,
+      "math": 2.1056157712817685,
+      "planning": 1.434587771221272
+    },
+    "worst_domain_retention_mean": 0.5613734723359503,
+    "base_regression_mean": 0.35144766862892785,
+    "repr_drift_mean": 8.497238159179687e-05,
+    "runtime_mean": 3.535798168182373,
+    "n_seeds": 5,
+    "n_valid": 5
+  },
+  "ExFusion": {
+    "method": "ExFusion",
+    "mean_retention": {
+      "coding": 0.6039135442862811,
+      "math": 0.6808595865336993,
+      "planning": 0.7888181781961847
+    },
+    "std_retention": {
+      "coding": 0.003924794977221902,
+      "math": 0.007228473242646125,
+      "planning": 0.0019267798692892072
+    },
+    "ci_retention": {
+      "coding": [
+        0.6002413294380877,
+        0.6070720803666042
+      ],
+      "math": [
+        0.674514595323757,
+        0.6868732645206643
+      ],
+      "planning": [
+        0.7872351687707363,
+        0.7905026602811961
+      ]
+    },
+    "mean_nll": {
+      "coding": 2.004493599677824,
+      "math": 2.1021225038900413,
+      "planning": 1.4164830772622117
+    },
+    "worst_domain_retention_mean": 0.6039135442862811,
+    "base_regression_mean": 0.26540305571320044,
+    "repr_drift_mean": 7.691383361816407e-05,
+    "runtime_mean": 2.911475944519043,
+    "n_seeds": 5,
+    "n_valid": 5
+  },
+  "AGX": {
+    "method": "AGX",
+    "mean_retention": {
+      "coding": 0.5897516227053373,
+      "math": 0.6924734837331649,
+      "planning": 0.828452126121267
+    },
+    "std_retention": {
+      "coding": 0.004255647113379985,
+      "math": 0.005497065501733675,
+      "planning": 0.0005756838531887665
+    },
+    "ci_retention": {
+      "coding": [
+        0.5862913649853299,
+        0.593855503983197
+      ],
+      "math": [
+        0.6884557410466859,
+        0.6979472079356045
+      ],
+      "planning": [
+        0.8279538509153281,
+        0.8289300840987057
+      ]
+    },
+    "mean_nll": {
+      "coding": 2.046514188565945,
+      "math": 2.058353134725104,
+      "planning": 1.2612655121145897
+    },
+    "worst_domain_retention_mean": 0.5897516227053373,
+    "base_regression_mean": 0.4105875346940883,
+    "repr_drift_mean": 8.91566276550293e-05,
+    "runtime_mean": 3.7242455005645754,
+    "n_seeds": 5,
+    "n_valid": 5
+  },
+  "weighted_task_arithmetic": {
+    "method": "weighted_task_arithmetic",
+    "mean_retention": {
+      "coding": 0.6069803589142849,
+      "math": 0.6604141340022963,
+      "planning": 0.8078946183071866
+    },
+    "std_retention": {
+      "coding": 0.0,
+      "math": 0.0,
+      "planning": 0.0
+    },
+    "ci_retention": {
+      "coding": [
+        0.6069803589142849,
+        0.6069803589142849
+      ],
+      "math": [
+        0.6604141340022963,
+        0.6604141340022963
+      ],
+      "planning": [
+        0.8078946183071866,
+        0.8078946183071866
+      ]
+    },
+    "mean_nll": {
+      "coding": 1.995393891284238,
+      "math": 2.1791754125064835,
+      "planning": 1.3417744312471556
+    },
+    "worst_domain_retention_mean": 0.6069803589142849,
+    "base_regression_mean": 0.20207822524357782,
+    "repr_drift_mean": 7.218122482299805e-05,
+    "runtime_mean": 3.0074715614318848,
     "n_seeds": 5,
     "n_valid": 5
   }

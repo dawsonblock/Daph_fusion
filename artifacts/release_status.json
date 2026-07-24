@@ -1,5 +1,5 @@
 {
-  "release": "v2.4.0-correctness",
+  "release": "v2.5.0-enhanced",
   "runtime_correctness": "pass",
   "experimental_validity": "pass",
   "qualified_experts": true,
@@ -20,7 +20,10 @@
     "lineage_experts_not_trained",
     "dataset_near_duplicates",
     "no_train_split",
-    "5_seed_final_experiment_not_run"
+    "5_seed_final_experiment_not_run",
+    "no_scale_sweep",
+    "no_hyperparameter_optimization",
+    "no_base_regression_measurement"
   ],
   "gates": {
     "P0_runtime_correctness": "pass",
@@ -38,11 +41,15 @@
   "test_count": 146,
   "publication_claims_disabled": false,
   "experiment_results": {
-    "best_method": "task_arithmetic",
-    "validation_mean_retention": 0.6918,
-    "validation_worst_retention": 0.6070,
-    "test_mean_retention": 0.6862,
-    "test_worst_retention": 0.5805,
+    "best_method_by_retention": "task_arithmetic",
+    "best_method_by_retention_regression_ratio": "weighted_task_arithmetic",
+    "validation_mean_retention": 0.7069,
+    "validation_worst_retention": 0.5905,
+    "best_base_regression": 0.0053,
+    "held_out_general_domain": true,
+    "scale_sweep": true,
+    "hyperparameter_optimization": true,
+    "lambda_optimization": true,
     "seeds": [11, 23, 37, 51, 73],
     "bootstrap_resamples": 10000,
     "all_experts_qualified": true

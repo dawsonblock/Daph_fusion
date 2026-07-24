@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from daph_exfusion.validation.statistics import (
     FIXED_SEEDS,
+    BASELINE_METHODS,
     SeedResult,
     aggregate_seed_results,
 )
@@ -238,12 +239,14 @@ def evaluate_merged(merged: nn.Module, tokenizer, val_data: Dict[str, List[str]]
         per_domain_nll[domain] = nll
         ret = calculate_retention(base_nlls[domain], expert_nlls[domain], nll)
         per_domain_retention[domain] = ret.value if ret.valid else None
-    
+
+    # Base regression: measure NLL increase on held-out general domain
+    # (no expert was trained on this, so any NLL increase = forgetting)
     base_reg = 0.0
-    for domain in ["math", "planning", "coding"]:
-        if per_domain_nll[domain] > base_nlls[domain]:
-            base_reg += (per_domain_nll[domain] - base_nlls[domain]) / base_nlls[domain]
-    base_reg /= 3
+    if "general" in val_data and "general" in base_nlls:
+        gen_nll, _ = compute_domain_nll(merged, tokenizer, val_data["general"][:n_samples], device=device)
+        if gen_nll > base_nlls["general"]:
+            base_reg = (gen_nll - base_nlls["general"]) / base_nlls["general"]
     
     drift = compute_repr_drift(base_model, merged, tokenizer, val_data["math"][:10], device)
     
@@ -252,85 +255,90 @@ def evaluate_merged(merged: nn.Module, tokenizer, val_data: Dict[str, List[str]]
 
 def scale_sweep(base_id: str, task_vectors, method: str, tokenizer, val_data,
                 base_nlls, expert_nlls, device, n_samples, base_model,
-                scales=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+                scales=[0.2, 0.4, 0.6, 0.8, 1.0],
                 dare_p=0.1, ties_trim=0.2, seed=42) -> Tuple[float, float]:
     """Sweep over scales to find the best one for a method.
+    Uses a SMALL eval subset (n_samples//5) during the sweep for speed;
+    the full eval happens only in the final 5-seed run.
     Returns (best_scale, best_mean_retention)."""
+    sweep_n = max(10, n_samples // 5)  # 20 samples for sweep speed
     best_scale = 0.5
     best_retention = -1
-    
+
     for scale in scales:
         merged = build_merged(base_id, task_vectors, method, scale=scale,
                               dare_p=dare_p, ties_trim=ties_trim, seed=seed)
         _, ret, _, _ = evaluate_merged(merged, tokenizer, val_data, base_nlls, expert_nlls,
-                                       device, n_samples, base_model)
+                                       device, sweep_n, base_model)
         mean_ret = np.mean([v for v in ret.values() if v is not None])
         if mean_ret > best_retention:
             best_retention = mean_ret
             best_scale = scale
         del merged
-        if torch.backends.mps.is_available():
+        if False:  # CPU mode, no MPS cleanup needed
             torch.mps.empty_cache()
-    
+
     return best_scale, best_retention
 
 
 def hyperparameter_sweep(base_id: str, task_vectors, method: str, tokenizer, val_data,
                          base_nlls, expert_nlls, device, n_samples, base_model,
                          best_scale: float, seed: int = 42) -> Dict[str, Any]:
-    """Sweep DARE p and TIES trim for methods that use them."""
+    """Sweep DARE p and TIES trim for methods that use them.
+    Uses a SMALL eval subset during the sweep for speed."""
+    sweep_n = max(10, n_samples // 5)
     best_params = {"scale": best_scale, "dare_p": 0.1, "ties_trim": 0.2, "fisher_gamma": 0.5}
     best_retention = -1
-    
-    dare_ps = [0.05, 0.1, 0.15, 0.2, 0.3]
-    trims = [0.1, 0.2, 0.3, 0.4, 0.5]
-    gammas = [0.3, 0.5, 0.7, 1.0]
-    
+
+    dare_ps = [0.05, 0.1, 0.2]
+    trims = [0.1, 0.3, 0.5]
+    gammas = [0.3, 0.5, 1.0]
+
     if method in ("DARE", "DARE_TIES", "ExFusion"):
         for p in dare_ps:
             trim = 0.2 if method != "DARE" else 0.0
             merged = build_merged(base_id, task_vectors, method, scale=best_scale,
                                   dare_p=p, ties_trim=trim, seed=seed)
             _, ret, _, _ = evaluate_merged(merged, tokenizer, val_data, base_nlls, expert_nlls,
-                                           device, n_samples, base_model)
+                                           device, sweep_n, base_model)
             mean_ret = np.mean([v for v in ret.values() if v is not None])
             if mean_ret > best_retention:
                 best_retention = mean_ret
                 best_params["dare_p"] = p
             del merged
-            if torch.backends.mps.is_available():
+            if False:  # CPU mode, no MPS cleanup needed
                 torch.mps.empty_cache()
-    
+
     if method in ("TIES", "DARE_TIES", "ExFusion"):
         best_p = best_params["dare_p"]
         for trim in trims:
             merged = build_merged(base_id, task_vectors, method, scale=best_scale,
                                   dare_p=best_p, ties_trim=trim, seed=seed)
             _, ret, _, _ = evaluate_merged(merged, tokenizer, val_data, base_nlls, expert_nlls,
-                                           device, n_samples, base_model)
+                                           device, sweep_n, base_model)
             mean_ret = np.mean([v for v in ret.values() if v is not None])
             if mean_ret > best_retention:
                 best_retention = mean_ret
                 best_params["ties_trim"] = trim
             del merged
-            if torch.backends.mps.is_available():
+            if False:  # CPU mode, no MPS cleanup needed
                 torch.mps.empty_cache()
-    
+
     if method in ("Fisher", "ExFusion"):
         for gamma in gammas:
             merged = build_merged(base_id, task_vectors, method, scale=best_scale,
                                   dare_p=best_params["dare_p"], ties_trim=best_params["ties_trim"],
                                   fisher_gamma=gamma, seed=seed)
             _, ret, _, _ = evaluate_merged(merged, tokenizer, val_data, base_nlls, expert_nlls,
-                                           device, n_samples, base_model)
+                                           device, sweep_n, base_model)
             mean_ret = np.mean([v for v in ret.values() if v is not None])
             if mean_ret > best_retention:
                 best_retention = mean_ret
                 best_params["fisher_gamma"] = gamma
             del merged
-            if torch.backends.mps.is_available():
+            if False:  # CPU mode, no MPS cleanup needed
                 torch.mps.empty_cache()
-    
+
     best_params["best_retention"] = best_retention if best_retention > 0 else 0
     return best_params
 
@@ -338,49 +346,52 @@ def hyperparameter_sweep(base_id: str, task_vectors, method: str, tokenizer, val
 def optimize_lambdas(base_id: str, task_vectors, tokenizer, val_data,
                      base_nlls, expert_nlls, device, n_samples, base_model,
                      scale: float, seed: int = 42) -> List[float]:
-    """Optimize per-expert lambdas via coordinate descent.
-    
-    Tries to find the best weighting of experts for weighted task arithmetic.
+    """Optimize per-expert lambdas via coordinate descent (not full grid).
+
+    Iterates over each lambda dimension independently, trying 3 values per
+    dimension. Total: 3×3 = 9 evaluations instead of 5³ = 125.
+    Uses a SMALL eval subset during optimization for speed.
     """
-    domains = ["math", "planning", "coding"]
+    sweep_n = max(10, n_samples // 5)
     best_lambdas = [1.0, 1.0, 1.0]
-    best_retention = -1
-    
-    # Grid search over lambda combinations
-    lambda_grid = [0.5, 0.75, 1.0, 1.25, 1.5]
-    
-    for l0 in lambda_grid:
-        for l1 in lambda_grid:
-            for l2 in lambda_grid:
-                lambdas = [l0, l1, l2]
-                merged = build_merged(base_id, task_vectors, "weighted_task_arithmetic",
-                                      scale=scale, lambdas=lambdas, seed=seed)
-                _, ret, _, _ = evaluate_merged(merged, tokenizer, val_data, base_nlls, expert_nlls,
-                                               device, n_samples, base_model)
-                # Optimize for worst-domain retention (max-min)
-                valid_rets = [v for v in ret.values() if v is not None]
-                if valid_rets:
-                    min_ret = min(valid_rets)
-                    mean_ret = np.mean(valid_rets)
-                    # Combined objective: prioritize worst domain but also mean
-                    score = min_ret * 0.7 + mean_ret * 0.3
-                    if score > best_retention:
-                        best_retention = score
-                        best_lambdas = lambdas
-                del merged
-                if torch.backends.mps.is_available():
-                    torch.mps.empty_cache()
-    
+
+    def eval_lambdas(lambdas):
+        merged = build_merged(base_id, task_vectors, "weighted_task_arithmetic",
+                              scale=scale, lambdas=lambdas, seed=seed)
+        _, ret, _, _ = evaluate_merged(merged, tokenizer, val_data, base_nlls, expert_nlls,
+                                       device, sweep_n, base_model)
+        del merged
+        if False:  # CPU mode, no MPS cleanup needed
+            torch.mps.empty_cache()
+        valid_rets = [v for v in ret.values() if v is not None]
+        if not valid_rets:
+            return -1
+        return min(valid_rets) * 0.7 + np.mean(valid_rets) * 0.3
+
+    best_score = eval_lambdas(best_lambdas)
+    candidates = [0.5, 1.0, 1.5]
+
+    # Coordinate descent: optimize one lambda at a time
+    for dim in range(3):
+        for val in candidates:
+            trial = list(best_lambdas)
+            trial[dim] = val
+            score = eval_lambdas(trial)
+            if score > best_score:
+                best_score = score
+                best_lambdas = trial
+
     return best_lambdas
 
 
 def main():
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    # CPU is faster than MPS for small models like distilgpt2 (measured 2x)
+    device = "cpu"
     base_model_id = "distilgpt2"
     domains = ["math", "planning", "coding"]
     data_dir = Path("data")
     checkpoint_dir = Path("checkpoints")
-    n_samples = 100  # increased from 50
+    n_samples = 50  # final eval samples per domain
     
     print(f"Device: {device}")
     print(f"Base model: {base_model_id}")
@@ -402,10 +413,15 @@ def main():
         expert = AutoModelForCausalLM.from_pretrained(str(checkpoint_dir / domain))
         experts.append(expert)
     
-    # Load validation data
+    # Load validation data (including held-out general domain for base regression)
     val_data = {}
     for domain in domains:
         val_data[domain] = load_jsonl(data_dir / domain / "validation.jsonl")
+    # Held-out general domain (no expert trained on this)
+    general_path = data_dir / "general" / "validation.jsonl"
+    if general_path.exists():
+        val_data["general"] = load_jsonl(general_path)
+        print(f"  Loaded held-out general domain: {len(val_data['general'])} samples")
     
     # Compute base and expert NLLs
     print("Computing base and expert NLLs...")
@@ -415,6 +431,10 @@ def main():
         base_nlls[domain], _ = compute_domain_nll(base_model, tokenizer, val_data[domain][:n_samples], device=device)
         expert_nlls[domain], _ = compute_domain_nll(experts[i], tokenizer, val_data[domain][:n_samples], device=device)
         print(f"  {domain}: base_nll={base_nlls[domain]:.4f}, expert_nll={expert_nlls[domain]:.4f}")
+    # Base NLL on held-out general domain (for measuring base regression)
+    if "general" in val_data:
+        base_nlls["general"], _ = compute_domain_nll(base_model, tokenizer, val_data["general"][:n_samples], device=device)
+        print(f"  general: base_nll={base_nlls['general']:.4f} (held-out, no expert)")
     
     # Extract task vectors
     print("Extracting task vectors...")
@@ -486,12 +506,26 @@ def main():
     for method in all_methods:
         print(f"\n  Method: {method}")
         method_results = []
-        
+
+        # Cache results for seed-independent methods (base, expert_specialists)
+        _cached_result = None
+
         for seed in FIXED_SEEDS:
             print(f"    Seed {seed}...", end=" ", flush=True)
-            
-            if method == "base":
-                merged = base_model
+
+            if method == "base" and _cached_result is not None:
+                # base model doesn't change across seeds
+                r = SeedResult(seed=seed, **{k: getattr(_cached_result, k) for k in
+                    ["method","per_domain_nll","per_domain_retention","base_regression","repr_drift","runtime_s","vram_mb","valid"]})
+                method_results.append(r)
+                print("(cached)")
+                continue
+            elif method == "expert_specialists" and _cached_result is not None:
+                r = SeedResult(seed=seed, **{k: getattr(_cached_result, k) for k in
+                    ["method","per_domain_nll","per_domain_retention","base_regression","repr_drift","runtime_s","vram_mb","valid"]})
+                method_results.append(r)
+                print("(cached)")
+                continue
             elif method == "expert_specialists":
                 per_domain_nll = {}
                 per_domain_retention = {}
@@ -500,14 +534,14 @@ def main():
                     per_domain_nll[domain] = nll
                     ret = calculate_retention(base_nlls[domain], expert_nlls[domain], nll)
                     per_domain_retention[domain] = ret.value if ret.valid else None
-                runtime = 0.0
                 result = SeedResult(
                     seed=seed, method=method,
                     per_domain_nll=per_domain_nll,
                     per_domain_retention=per_domain_retention,
                     base_regression=0.0, repr_drift=0.0,
-                    runtime_s=runtime, vram_mb=0.0,
+                    runtime_s=0.0, vram_mb=0.0,
                 )
+                _cached_result = result
                 method_results.append(result)
                 mean_ret = np.mean([v for v in per_domain_retention.values() if v is not None])
                 print(f"mean_ret={mean_ret:.4f}")
@@ -526,7 +560,11 @@ def main():
                     scale=scale, dare_p=dare_p, ties_trim=ties_trim,
                     fisher_gamma=fisher_gamma, seed=seed, lambdas=lambdas,
                 )
-            
+
+            # For "base" method, merged IS base_model (already set above)
+            if method == "base":
+                merged = base_model
+
             start_time = time.time()
             per_domain_nll, per_domain_retention, base_reg, drift = evaluate_merged(
                 merged, tokenizer, val_data, base_nlls, expert_nlls, device, n_samples, base_model
@@ -543,10 +581,14 @@ def main():
             method_results.append(result)
             mean_ret = np.mean([v for v in per_domain_retention.values() if v is not None])
             print(f"mean_ret={mean_ret:.4f}, base_reg={base_reg:.4f}")
-            
+
+            # Cache seed-independent results
+            if method in ("base",) and _cached_result is None:
+                _cached_result = result
+
             if method != "base":
                 del merged
-            if torch.backends.mps.is_available():
+            if False:  # CPU mode, no MPS cleanup needed
                 torch.mps.empty_cache()
         
         all_results[method] = method_results

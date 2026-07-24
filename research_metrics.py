@@ -97,7 +97,7 @@ def compute_domain_nll(
     tokenizer: Any,
     texts: List[str],
     device: str = "cpu",
-    batch_size: int = 16,
+    batch_size: int = 32,
     max_length: int = 128,
 ) -> Tuple[float, float]:
     model.eval()

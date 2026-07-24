@@ -1,0 +1,75 @@
+{
+  "optimal_scales": {
+    "task_arithmetic": 0.6,
+    "mean_merge": 1.0,
+    "DARE": 0.6,
+    "TIES": 1.0,
+    "DARE_TIES": 1.0,
+    "Fisher": 1.0,
+    "ExFusion": 1.0,
+    "AGX": 0.6
+  },
+  "optimal_params": {
+    "task_arithmetic": {
+      "scale": 0.6,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 0.5,
+      "best_retention": 0
+    },
+    "mean_merge": {
+      "scale": 1.0,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 0.5,
+      "best_retention": 0
+    },
+    "DARE": {
+      "scale": 0.6,
+      "dare_p": 0.05,
+      "ties_trim": 0.2,
+      "fisher_gamma": 0.5,
+      "best_retention": 0.7340661921042871
+    },
+    "TIES": {
+      "scale": 1.0,
+      "dare_p": 0.1,
+      "ties_trim": 0.5,
+      "fisher_gamma": 0.5,
+      "best_retention": 0.7014164252748815
+    },
+    "DARE_TIES": {
+      "scale": 1.0,
+      "dare_p": 0.2,
+      "ties_trim": 0.5,
+      "fisher_gamma": 0.5,
+      "best_retention": 0.7039345183484805
+    },
+    "Fisher": {
+      "scale": 1.0,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 1.0,
+      "best_retention": 0.7167603084380637
+    },
+    "ExFusion": {
+      "scale": 1.0,
+      "dare_p": 0.2,
+      "ties_trim": 0.1,
+      "fisher_gamma": 0.5,
+      "best_retention": 0.7266619486795979
+    },
+    "AGX": {
+      "scale": 0.6,
+      "dare_p": 0.1,
+      "ties_trim": 0.2,
+      "fisher_gamma": 0.5,
+      "best_retention": 0
+    }
+  },
+  "optimal_lambdas": [
+    1.0,
+    1.0,
+    1.0
+  ]
+}
