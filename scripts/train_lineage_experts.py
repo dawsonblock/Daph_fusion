@@ -69,11 +69,24 @@ def _hash_training_data(data_dir: Path, domain: str) -> str:
     if not domain_dir.exists():
         raise FileNotFoundError(f"Training data dir not found: {domain_dir}")
     h = hashlib.sha256()
-    for f in sorted(domain_dir.glob("*.txt")):
-        text = f.read_text(encoding="utf-8")
-        canonical = _canonicalize_text(text)
-        h.update(canonical.encode("utf-8"))
-        h.update(b"\n---\n")
+    train_file = domain_dir / "train.jsonl"
+    if train_file.exists():
+        import json
+        with open(train_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rec = json.loads(line)
+                    text = rec.get("text", "")
+                    canonical = _canonicalize_text(text)
+                    h.update(canonical.encode("utf-8"))
+                    h.update(b"\n---\n")
+    else:
+        for f in sorted(domain_dir.glob("*.txt")):
+            text = f.read_text(encoding="utf-8")
+            canonical = _canonicalize_text(text)
+            h.update(canonical.encode("utf-8"))
+            h.update(b"\n---\n")
     return h.hexdigest()
 
 
@@ -106,14 +119,26 @@ class TextDataset(Dataset):
 
 
 def load_domain_texts(data_dir: Path, domain: str) -> List[str]:
+    """Load training texts for a domain from train.jsonl."""
     domain_dir = data_dir / domain
     if not domain_dir.exists():
         raise FileNotFoundError(f"Training data dir not found: {domain_dir}")
     texts = []
-    for f in sorted(domain_dir.glob("*.txt")):
-        texts.append(f.read_text(encoding="utf-8"))
+    train_file = domain_dir / "train.jsonl"
+    if train_file.exists():
+        import json
+        with open(train_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    rec = json.loads(line)
+                    texts.append(rec.get("text", ""))
+    # Also check for .txt files as fallback
     if not texts:
-        raise ValueError(f"No .txt training files found in {domain_dir}")
+        for f in sorted(domain_dir.glob("*.txt")):
+            texts.append(f.read_text(encoding="utf-8"))
+    if not texts:
+        raise ValueError(f"No training data found in {domain_dir}")
     return texts
 
 

@@ -3,3 +3,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .DS_Store
+
+# Model checkpoints (too large for git; store externally)
+checkpoints/
+*.safetensors
+*.bin

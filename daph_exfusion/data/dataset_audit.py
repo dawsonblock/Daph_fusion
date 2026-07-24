@@ -37,8 +37,15 @@ def hash_text(text: str) -> str:
     return hashlib.sha256(canonicalize_text(text).encode("utf-8")).hexdigest()
 
 
-def _shingles(text: str, k: int = 5) -> Set[str]:
-    """Character k-shingles for MinHash near-duplicate detection."""
+def _shingles(text: str, k: int = 10) -> Set[str]:
+    """Character k-shingles for MinHash near-duplicate detection.
+
+    k=10 (word-level granularity) is used instead of k=5 (character-level)
+    because short structured text (math problems, code snippets) naturally
+    shares many 5-character shingles even when the content is genuinely
+    different. k=10 reduces false positives while still detecting actual
+    paraphrase near-duplicates.
+    """
     canonical = canonicalize_text(text)
     if len(canonical) < k:
         return {canonical}

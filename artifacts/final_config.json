@@ -1,0 +1,24 @@
+{
+  "release": "v2.4.0-correctness",
+  "config_hash": "47db4f87ba0b91fa5218b2586337a7dd89bd6729ea2f948c23f5a2ba1a39a1e1",
+  "frozen_at": "2026-07-24T01:16:00.372617+00:00",
+  "config": {
+    "base_model": "distilgpt2",
+    "best_method": "task_arithmetic",
+    "seeds": [
+      11,
+      23,
+      37,
+      51,
+      73
+    ],
+    "domains": [
+      "math",
+      "planning",
+      "coding"
+    ],
+    "merge_scale": 0.5,
+    "n_samples_validation": 50
+  },
+  "test_split_used_during_search": false
+}
