@@ -1,26 +1,20 @@
-"""Task Arithmetic merge module (Phase 4 — canonical dense baseline).
-
-Task Arithmetic is the primary dense merge baseline.
+"""Canonical dense Task Arithmetic merge for ExFusion v3.
 
 Definition:
     Δᵢ = θᵢ - θ₀
     θ* = θ₀ + α Σᵢ λᵢ Δᵢ
 
-Variants:
-    TA-U (uniform):           λᵢ = 1/N
-    TA-S (scale-optimized):   λᵢ = 1/N, α searched over {0.25, 0.5, ..., 1.25}
-    TA-O (coefficient-opt):   λᵢ optimized subject to constraints
+Production variants:
+    TA-0: λᵢ = 1/N, search α only.
+    TA-1: search λ on the simplex and α independently.
 
-Constraints tested:
-    unconstrained, λᵢ ≥ 0, Σλᵢ = 1, Σλᵢ ≤ 1
-
-Every later method must beat optimized Task Arithmetic, not naive equal
-averaging. TA-O is the actual baseline ceiling.
+The merge operator is intentionally simple and side-effect free: it never moves
+or mutates the caller's base/expert modules. Search lives in ``task_search``.
 """
 from __future__ import annotations
 
 import copy
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
@@ -31,9 +25,40 @@ from daph_exfusion.merge.types import (
     MergeMethod,
     MergeResult,
     OperatorTrace,
-    extract_task_vectors,
     validate_parameter_names,
 )
+
+
+def _cpu_task_vectors(
+    base_model: nn.Module,
+    experts: Sequence[nn.Module],
+) -> Tuple[Dict[str, Tensor], list[Dict[str, Tensor]]]:
+    """Extract FP32 CPU task vectors without changing caller device placement."""
+    base_params = {
+        name: param.detach().float().cpu()
+        for name, param in base_model.named_parameters()
+    }
+    task_vectors: list[Dict[str, Tensor]] = []
+    for expert in experts:
+        expert_params = dict(expert.named_parameters())
+        task_vectors.append({
+            name: expert_params[name].detach().float().cpu() - base_param
+            for name, base_param in base_params.items()
+        })
+    return base_params, task_vectors
+
+
+def _validate_lambdas(lambdas: Sequence[float], n_experts: int) -> list[float]:
+    if n_experts <= 0:
+        raise ValueError("Task Arithmetic requires at least one expert")
+    if not lambdas:
+        return [1.0 / n_experts] * n_experts
+    if len(lambdas) != n_experts:
+        raise ValueError(f"lambdas length {len(lambdas)} != n_experts {n_experts}")
+    values = [float(v) for v in lambdas]
+    if not all(torch.isfinite(torch.tensor(v)).item() for v in values):
+        raise ValueError("lambdas must be finite")
+    return values
 
 
 def merge_task_arithmetic(
@@ -42,60 +67,35 @@ def merge_task_arithmetic(
     config: MergeConfig,
     device: str = "cpu",
 ) -> MergeResult:
-    """Execute Task Arithmetic merge.
+    """Execute θ* = θ₀ + α Σᵢ λᵢ Δᵢ.
 
-    θ* = θ₀ + α Σᵢ λᵢ Δᵢ
-
-    Args:
-        base_model: Base model θ₀.
-        experts: List of specialist models.
-        config: Merge configuration (method must be task_arithmetic).
-        device: Device for computation.
-
-    Returns:
-        MergeResult with the merged model and operator trace.
+    The input modules are treated as immutable. The returned model is a deep
+    copy of the base model and is the only object whose parameters/device are
+    changed by this function.
     """
     if config.method != MergeMethod.TASK_ARITHMETIC:
         raise ValueError(
             f"merge_task_arithmetic called with method={config.method}, "
-            f"expected task_arithmetic"
+            "expected task_arithmetic"
         )
 
     n_experts = len(experts)
     validate_parameter_names(experts, base_model)
+    lambdas = _validate_lambdas(config.lambdas, n_experts)
+    scale = float(config.task_scale)
+    if not torch.isfinite(torch.tensor(scale)).item():
+        raise ValueError("task_scale must be finite")
 
-    # Coefficients: empty = uniform
-    if config.lambdas:
-        lambdas = list(config.lambdas)
-        if len(lambdas) != n_experts:
-            raise ValueError(
-                f"lambdas length {len(lambdas)} != n_experts {n_experts}"
-            )
-    else:
-        lambdas = [1.0 / n_experts] * n_experts
-
-    scale = config.task_scale
-
-    # Extract task vectors in FP32
-    base_cpu = base_model.cpu()
-    for e in experts:
-        e.cpu()
-    task_vectors = extract_task_vectors(experts, base_cpu)
-
-    # Create merged model
-    merged = copy.deepcopy(base_cpu)
-    merged_params = dict(merged.named_parameters())
+    base_params_cpu, task_vectors = _cpu_task_vectors(base_model, experts)
+    merged = copy.deepcopy(base_model).cpu()
 
     with torch.no_grad():
-        for name, param in merged_params.items():
-            deltas = []
-            for i, tv in enumerate(task_vectors):
-                if name in tv:
-                    deltas.append(tv[name] * lambdas[i])
-            if not deltas:
-                continue
-            merged_delta = sum(deltas)
-            param.copy_(param.detach().float() + merged_delta * scale)
+        for name, param in merged.named_parameters():
+            base_param = base_params_cpu[name]
+            merged_delta = torch.zeros_like(base_param)
+            for i, task_vector in enumerate(task_vectors):
+                merged_delta.add_(task_vector[name], alpha=lambdas[i])
+            param.copy_(base_param + scale * merged_delta)
 
     merged.to(device)
 
@@ -110,7 +110,6 @@ def merge_task_arithmetic(
         ties_used=False,
         config_hash=config.config_hash(),
     )
-
     return MergeResult(
         merged_model=merged,
         trace=trace,
@@ -124,20 +123,13 @@ def merge_frozen(
     config: MergeConfig,
     device: str = "cpu",
 ) -> MergeResult:
-    """Frozen merge: return base model unchanged.
-
-    Used as a control and as the default for normalization/embedding
-    groups where merging is not beneficial.
-    """
-    merged = copy.deepcopy(base_model.cpu())
-    merged.to(device)
-
+    """Return an unchanged copy of the base model."""
+    merged = copy.deepcopy(base_model).to(device)
     trace = OperatorTrace(
         method="frozen",
         operators=["FROZEN"],
         config_hash=config.config_hash(),
     )
-
     return MergeResult(
         merged_model=merged,
         trace=trace,
@@ -146,11 +138,8 @@ def merge_frozen(
     )
 
 
-# =============================================================================
-# Scale search (TA-S)
-# =============================================================================
-
-
+# Backward-compatible alpha-only helper. The production optimizer is
+# daph_exfusion.merge.task_search.search_ta1, which jointly searches λ and α.
 DEFAULT_SCALE_GRID: Tuple[float, ...] = (0.25, 0.5, 0.75, 1.0, 1.25)
 
 
@@ -161,33 +150,18 @@ def search_task_arithmetic_scale(
     scale_grid: Optional[Sequence[float]] = None,
     device: str = "cpu",
 ) -> Tuple[float, float]:
-    """Search global scale α for Task Arithmetic.
+    """Search α with uniform λ. Retained only as the TA-0 compatibility helper."""
+    grid = tuple(scale_grid) if scale_grid is not None else DEFAULT_SCALE_GRID
+    if not grid:
+        raise ValueError("scale_grid must not be empty")
 
-    Args:
-        base_model: Base model.
-        experts: Specialist models.
-        evaluator: Callable(merged_model) -> float (lower is better, e.g. NLL).
-        scale_grid: Scale values to search. Defaults to {0.25, ..., 1.25}.
-        device: Device for computation.
-
-    Returns:
-        (best_scale, best_score)
-    """
-    if scale_grid is None:
-        scale_grid = DEFAULT_SCALE_GRID
-
-    best_scale = 1.0
+    best_scale = float(grid[0])
     best_score = float("inf")
-
-    for scale in scale_grid:
-        config = MergeConfig(
-            method=MergeMethod.TASK_ARITHMETIC,
-            task_scale=scale,
-        )
+    for scale in grid:
+        config = MergeConfig(method=MergeMethod.TASK_ARITHMETIC, task_scale=float(scale))
         result = merge_task_arithmetic(base_model, experts, config, device=device)
-        score = evaluator(result.merged_model)
+        score = float(evaluator(result.merged_model))
         if score < best_score:
             best_score = score
-            best_scale = scale
-
+            best_scale = float(scale)
     return best_scale, best_score
