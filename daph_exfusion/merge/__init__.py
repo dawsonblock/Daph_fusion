@@ -19,7 +19,6 @@ from daph_exfusion.merge.types import (
     CoefficientParameterization,
     FisherStabilization,
     RegMeanMode,
-    MissingCurvatureError,
     extract_task_vectors,
     validate_parameter_names,
     classify_parameter_family,
@@ -29,6 +28,7 @@ from daph_exfusion.merge.types import (
     validate_ssm_stability,
     FINE_FAMILIES,
 )
+from daph_exfusion.merge.fisher_dense import MissingCurvatureError
 from daph_exfusion.merge.pipeline_v3 import merge_experts as merge_experts_v3
 from daph_exfusion.merge.fisher_task_arithmetic import merge_fisher_task_arithmetic
 from daph_exfusion.merge.task_search import (
