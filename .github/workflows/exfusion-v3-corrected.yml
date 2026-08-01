@@ -1,0 +1,60 @@
+name: ExFusion v3 corrected build
+
+on:
+  pull_request:
+    branches:
+      - exfusion-v3-dense-merge
+  workflow_dispatch:
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest numpy scipy scikit-learn pyyaml transformers torch
+
+      - name: Compile corrected production modules
+        run: |
+          python -m py_compile \
+            daph_exfusion/merge/task_arithmetic.py \
+            daph_exfusion/merge/fisher_task_arithmetic.py \
+            daph_exfusion/merge/task_search.py \
+            daph_exfusion/merge/pipeline_v3.py \
+            daph_exfusion/cli/main.py
+
+      - name: Run corrected dense-merge contracts
+        run: |
+          python -m pytest -q \
+            tests/test_v3_corrected_dense_merge.py \
+            tests/test_v3_task_search.py \
+            tests/test_v3_fisher.py \
+            tests/test_v3_research_contracts.py \
+            tests/test_merge_baselines.py
+
+      - name: Package full corrected source tree
+        if: always()
+        run: |
+          mkdir -p dist
+          git archive \
+            --format=zip \
+            --output=dist/Daph_fusion-exfusion-v3-dense-merge-corrected.zip \
+            HEAD
+
+      - name: Upload corrected build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Daph_fusion-exfusion-v3-dense-merge-corrected
+          path: dist/Daph_fusion-exfusion-v3-dense-merge-corrected.zip
+          if-no-files-found: error

@@ -1,20 +1,14 @@
-"""Canonical merge pipeline for DAPH ExFusion v3.
+"""Canonical merge surface for DAPH ExFusion v3.
 
-Single entry point for all model merging. Every experiment, AGX candidate,
-CLI, and integration test must go through ``merge_experts`` so that algorithm
-names and implementations never diverge.
+Production merging is Task Arithmetic first:
+    TA-0 uniform
+    TA-1 expert-weighted
+    TA-2 Fisher-weighted
+    TA-3 architecture-family weighted
 
-Production merge modes (TA-0 through TA-3):
-    TA-0 (uniform)         — θ* = θ₀ + α (1/N) Σᵢ Δᵢ
-    TA-1 (weighted)        — θ* = θ₀ + α Σᵢ λᵢ Δᵢ
-    TA-2 (Fisher-weighted) — θ*_k = θ₀ + α Σᵢ wᵢ F_{i,k}^γ Δ_{i,k} / (Σᵢ wᵢ F_{i,k}^γ + ε)
-    TA-3 (family-weighted) — θ*_{f,k} = θ₀ + α_f Σᵢ w_{i,f} Δ_{i,k}
-
-Legacy baselines: dare, ties_magnitude, ties_majority, dare_ties
-Experimental: regmean, regmean_pp, kfac, surgery, subspace, trust_region,
-              coefficient_opt, agx (see daph_exfusion/experimental/)
+Legacy sparse algorithms are controlled baselines. Experimental algorithms stay
+isolated under ``daph_exfusion.experimental``.
 """
-# v3 canonical types
 from daph_exfusion.merge.types import (
     ExpertSpec,
     MergeConfig as MergeConfigV3,
@@ -25,7 +19,6 @@ from daph_exfusion.merge.types import (
     CoefficientParameterization,
     FisherStabilization,
     RegMeanMode,
-    MissingCurvatureError,
     extract_task_vectors,
     validate_parameter_names,
     classify_parameter_family,
@@ -35,10 +28,9 @@ from daph_exfusion.merge.types import (
     validate_ssm_stability,
     FINE_FAMILIES,
 )
-# v3 pipeline (single entry point)
+from daph_exfusion.merge.fisher_dense import MissingCurvatureError
 from daph_exfusion.merge.pipeline_v3 import merge_experts as merge_experts_v3
-
-# Production search
+from daph_exfusion.merge.fisher_task_arithmetic import merge_fisher_task_arithmetic
 from daph_exfusion.merge.task_search import (
     search_task_arithmetic,
     search_ta0,
@@ -51,7 +43,8 @@ from daph_exfusion.merge.task_search import (
     SearchResult,
 )
 
-# Backward-compatible v2.5 API (legacy tests depend on these)
+# Backward-compatible v2.5 API. Kept only because legacy tests and research
+# comparisons still import these names.
 from daph_exfusion.merge.pipeline import (
     ExpertMergeState,
     MergeConfig,
@@ -60,7 +53,6 @@ from daph_exfusion.merge.pipeline import (
 )
 
 __all__ = [
-    # v3 types
     "ExpertSpec",
     "MergeConfigV3",
     "MergeMethod",
@@ -79,9 +71,8 @@ __all__ = [
     "count_layers",
     "validate_ssm_stability",
     "FINE_FAMILIES",
-    # v3 pipeline
     "merge_experts_v3",
-    # production search
+    "merge_fisher_task_arithmetic",
     "search_task_arithmetic",
     "search_ta0",
     "search_ta1",
@@ -91,7 +82,6 @@ __all__ = [
     "generate_scale_grid",
     "EvaluationResult",
     "SearchResult",
-    # v2.5 backward-compatible
     "ExpertMergeState",
     "MergeConfig",
     "MergeResult",

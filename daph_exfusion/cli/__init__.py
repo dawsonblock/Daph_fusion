@@ -1,4 +1,8 @@
-"""DAPH ExFusion v3 CLI."""
-from daph_exfusion.cli.main import main
+"""DAPH ExFusion v3 command-line package.
 
-__all__ = ["main"]
+Importing this package is intentionally side-effect free. Use
+``daph_exfusion.cli.main.main`` (or the installed ``daph-merge`` entry point)
+to invoke the CLI.
+"""
+
+__all__: list[str] = []
