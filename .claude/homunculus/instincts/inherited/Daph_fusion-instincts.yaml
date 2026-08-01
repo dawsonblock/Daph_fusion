@@ -1,0 +1,445 @@
+# Instincts generated from https://github.com/dawsonblock/Daph_fusion
+# Generated: 2026-08-01T21:20:44.292Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: Daph_fusion-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: fix, feat, chore, test, ci
+
+## Evidence
+
+- 8 commits analyzed
+- Detected conventional commit pattern
+- Examples: fix: make task arithmetic side-effect free, feat: add side-effect-free production Fisher task arithmetic
+
+---
+id: Daph_fusion-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Commit Length
+
+## Action
+
+Keep commit messages concise (~49 characters)
+
+## Evidence
+
+- Average commit message length: 49 chars
+- Based on 8 commits
+
+---
+id: Daph_fusion-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: Daph_fusion-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: Daph_fusion-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: Daph_fusion-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: Daph_fusion-workflow-add-or-correct-task-arithmetic-operator
+trigger: "when doing add or correct task arithmetic operator"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Workflow Add Or Correct Task Arithmetic Operator
+
+## Action
+
+Follow the add-or-correct-task-arithmetic-operator workflow:
+1. Implement or fix the operator logic in a new or existing file under daph_exfusion/merge/
+2. Update the pipeline (e.g., pipeline_v3.py) to use the new or corrected operator
+3. Export the operator in daph_exfusion/merge/__init__.py
+4. Add or update tests in tests/ (e.g., test_v3_corrected_dense_merge.py)
+5. Update or add CI workflow for validation and packaging
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: daph_exfusion/merge/task_arithmetic.py, daph_exfusion/merge/fisher_task_arithmetic.py, daph_exfusion/merge/pipeline_v3.py
+
+---
+id: daph_fusion-instinct-naming-files
+trigger: "When creating or renaming a file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Naming Files
+
+## Action
+
+Use snake_case for file names
+
+## Evidence
+
+- Pattern in files: daph_exfusion/merge/task_arithmetic.py, daph_exfusion/merge/fisher_task_arithmetic.py
+
+---
+id: daph_fusion-instinct-naming-functions
+trigger: "When defining a function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Naming Functions
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.functions
+
+---
+id: daph_fusion-instinct-naming-classes
+trigger: "When defining a class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Naming Classes
+
+## Action
+
+Use PascalCase for class names
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.classes
+
+---
+id: daph_fusion-instinct-naming-constants
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Naming Constants
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.constants
+
+---
+id: daph_fusion-instinct-import-style
+trigger: "When importing modules within the package"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in codeStyle.importStyle
+
+---
+id: daph_fusion-instinct-export-style
+trigger: "When exporting functions or classes from a module"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Export Style
+
+## Action
+
+Use named exports (explicitly list in __init__.py)
+
+## Evidence
+
+- Pattern in codeStyle.exportStyle
+- Pattern in daph_exfusion/merge/__init__.py
+
+---
+id: daph_fusion-instinct-test-location
+trigger: "When adding or updating tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Test Location
+
+## Action
+
+Place tests in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation
+- Pattern in files: tests/test_v3_corrected_dense_merge.py
+
+---
+id: daph_fusion-instinct-test-contracts
+trigger: "When adding tests for new or corrected operators"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Test Contracts
+
+## Action
+
+Add or update dense merge contract tests in the tests/ directory
+
+## Evidence
+
+- Seen in commit: 'test: add corrected dense merge contracts'
+- Pattern in files: tests/test_v3_corrected_dense_merge.py
+
+---
+id: daph_fusion-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Commit Format
+
+## Action
+
+Use conventional commit prefixes (fix, feat, chore, test, ci) and keep message concise (~49 chars)
+
+## Evidence
+
+- Pattern in commits.prefixes
+- Pattern in commits.averageLength
+- Examples: 'fix: make task arithmetic side-effect free'
+
+---
+id: daph_fusion-instinct-commit-fix
+trigger: "When fixing a bug or issue"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Commit Fix
+
+## Action
+
+Prefix commit message with 'fix:'
+
+## Evidence
+
+- Examples: 'fix: make task arithmetic side-effect free', 'fix: route TA-2 through safe Fisher task arithmetic'
+
+---
+id: daph_fusion-instinct-commit-feat
+trigger: "When adding a new feature or operator"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Commit Feat
+
+## Action
+
+Prefix commit message with 'feat:'
+
+## Evidence
+
+- Examples: 'feat: add side-effect-free production Fisher task arithmetic', 'feat: make dense merge CLI execute real merges'
+
+---
+id: daph_fusion-instinct-commit-chore
+trigger: "When making non-functional or maintenance changes"
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Commit Chore
+
+## Action
+
+Prefix commit message with 'chore:'
+
+## Evidence
+
+- Example: 'chore: export corrected TA-2 production operator'
+
+---
+id: daph_fusion-instinct-commit-test
+trigger: "When adding or updating tests"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Commit Test
+
+## Action
+
+Prefix commit message with 'test:'
+
+## Evidence
+
+- Example: 'test: add corrected dense merge contracts'
+
+---
+id: daph_fusion-instinct-commit-ci
+trigger: "When updating CI configuration or workflows"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Commit Ci
+
+## Action
+
+Prefix commit message with 'ci:'
+
+## Evidence
+
+- Example: 'ci: validate and package corrected ExFusion v3 build'
+
+---
+id: daph_fusion-instinct-workflow-add-task-arithmetic-operator
+trigger: "When someone wants to add a new or corrected task arithmetic operator to the system"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: dawsonblock/Daph_fusion
+---
+
+# Daph_fusion Instinct Workflow Add Task Arithmetic Operator
+
+## Action
+
+Implement or fix operator logic in daph_exfusion/merge/, update pipeline_v3.py, export in __init__.py, add/update tests in tests/, update/add CI workflow
+
+## Evidence
+
+- Workflow: add-or-correct-task-arithmetic-operator
+- Files: daph_exfusion/merge/task_arithmetic.py, daph_exfusion/merge/fisher_task_arithmetic.py, daph_exfusion/merge/pipeline_v3.py, daph_exfusion/merge/__init__.py, tests/test_v3_corrected_dense_merge.py, .github/workflows/exfusion-v3-corrected.yml
+- Commit sequence in workflow description
+
